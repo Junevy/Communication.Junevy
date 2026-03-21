@@ -18,8 +18,12 @@ namespace Communication.ModBus.Common
 
         public bool DtrDisable { get; set;} = false;
 
-        public TimeSpan WriteTimeOut { get; set; } = TimeSpan.FromMilliseconds(1000);
+        public int WriteTimeOut { get; set; } = 1000;
 
-        public TimeSpan ReadTimeOut { get; set; } = TimeSpan.FromMilliseconds(1000);
+        public int ReadTimeOut { get; set; } = 1000;
+
+        public int IntervalTime { get; set; } = 10;
+
+        public int RetryCount { get; set; } = 3;
     }
 }
