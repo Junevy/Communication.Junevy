@@ -1,6 +1,6 @@
 ﻿using System.IO.Ports;
 
-namespace Communication.ModBus.Common
+namespace Communication.ModBus.ModBusRTU
 {
     public class ModBusRTUConfig
     {
@@ -16,7 +16,7 @@ namespace Communication.ModBus.Common
 
         public bool DtrEnable { get; set; } = false;
 
-        public bool DtrDisable { get; set;} = false;
+        public bool RtsEnable { get; set;} = false;
 
         public int WriteTimeOut { get; set; } = 1000;
 

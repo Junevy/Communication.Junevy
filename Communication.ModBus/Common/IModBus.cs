@@ -1,9 +1,11 @@
-﻿namespace Communication.ModBus.Common
+﻿using Communication.ModBus.ModBusRTU;
+
+namespace Communication.ModBus.Common
 {
-    interface IModBus
+    interface IModBus : IDisposable
     {
         //public ModBusRTUConfig Config { get; set; }
-        public bool Connect(ModBusRTUConfig config);
+        public bool Connect();
         public void Disconnect();
     }
 }

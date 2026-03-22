@@ -1,4 +1,6 @@
-﻿namespace Communication.ModBus.Common
+﻿using static System.Runtime.InteropServices.JavaScript.JSType;
+
+namespace Communication.ModBus.Common
 {
     public class Result<T>
     {
@@ -10,7 +12,9 @@
 
 
         public static Result<T> Success(T data) => new() { IsSuccess = true, Data = data };
-        public static Result<T> Fail(string errMsg) => new() { IsSuccess = false, ErrorMessage = errMsg };
-
+        public static Result<T> Fail(string errMsg, T data = default)
+        {
+            return new() { IsSuccess = false, ErrorMessage = errMsg, Data = data };
+        }
     }
 }
