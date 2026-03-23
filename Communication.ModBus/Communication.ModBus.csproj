@@ -4,11 +4,23 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-	<PrivateAssets>none</PrivateAssets>
+	  <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	  <!-- NuGet 包信息 -->
+	  <PackageId>Communication.ModBus</PackageId>
+	  <Version>1.0.0</Version>
+	  <Authors>Junevy</Authors>
+	  <Company>Junevy</Company>
+	  <Description>ModBus communication library for RTU/TCP.</Description>
+	  <PackageTags>modbus rtu tcp serial communication</PackageTags>
+	  <RepositoryUrl>https://your-repo-url</RepositoryUrl>
+	  <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+	  <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="10.0.5" />
   </ItemGroup>
+
+
 
 </Project>

@@ -5,8 +5,8 @@ namespace Communication.ModBus.ModBusRTU
     public class ModBusRTUConfig
     {
         public string PortName { get; set; }
-        
-        public int BaudRate { get; set; }
+
+        public int BaudRate { get; set; } = 9600;
 
         public Parity Parity { get; set; } = Parity.None;
 
