@@ -73,19 +73,20 @@ namespace Communication.ModBus.ModBusRTU
 
             byte[] request = ModBusHelper.BuildReadFrame(slaveID, 0x01, start, length);
 
-            return await ExecuteAsync(request, slaveID, 0x01, response =>
+            return await ExecuteReadAsync(request, slaveID, 0x01, response =>
             {
                 return ModBusResponseParser.ParseReadCoils(response, slaveID, 0x01, length);
             }, token);
         }
 
-        private async Task<Result<T>> ExecuteAsync<T>(byte[] request, byte slaveID, byte functionCode,
+        private async Task<Result<T>> ExecuteReadAsync<T>(byte[] request, byte slaveID, byte functionCode,
             Func<byte[], Result<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
             string lastError = string.Empty;
 
-            // write timeout.
+            var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            writeTimeout.CancelAfter(Config.WriteTimeOut);
 
             try
             {
@@ -95,13 +96,14 @@ namespace Communication.ModBus.ModBusRTU
                 for (int i = 0; i < Config.RetryCount; i++)
                 {
                     token.ThrowIfCancellationRequested();
+
                     try
                     {
                         this.serialPort.DiscardInBuffer();  // 清除串口区缓存
                         this.serialPort.DiscardOutBuffer();
 
                         // 异步处理
-                        await serialPort.BaseStream.WriteAsync(request, token);
+                        await serialPort.BaseStream.WriteAsync(request, writeTimeout.Token);
                         await serialPort.BaseStream.FlushAsync(token);
                         var receiveResult = await ReceiveFrameAsync(slaveID, functionCode, token);
 
@@ -134,7 +136,7 @@ namespace Communication.ModBus.ModBusRTU
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeoutCts.CancelAfter(Config.ReadTimeOut);
 
-            var tk = timeoutCts.Token;
+            var timeoutToken = timeoutCts.Token;
             var buffer = new List<byte>(256);
             var temp = new byte[256];
 
@@ -144,14 +146,17 @@ namespace Communication.ModBus.ModBusRTU
                 {
                     token.ThrowIfCancellationRequested();
 
-                    var count = await this.serialPort.BaseStream.ReadAsync(temp, 0, temp.Length, tk);
+                    var count = await this.serialPort.BaseStream.ReadAsync(temp, 0, temp.Length, timeoutToken);
 
                     if (count <= 0) continue;
 
-                    buffer.AddRange(temp.AsSpan(0, count).ToArray());
+                    buffer.AddRange(temp.AsSpan(0, count));
+                    //buffer.AddRange(temp.AsSpan(0, count).ToArray());
 
                     if (ModBusRTUFrame.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
                         return Result<byte[]>.Success(frame);
+
+                    await Task.Delay(Config.IntervalTime, token);   // 等待帧
                 }
             }
             catch (OperationCanceledException oex)

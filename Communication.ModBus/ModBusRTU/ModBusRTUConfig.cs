@@ -22,7 +22,7 @@ namespace Communication.ModBus.ModBusRTU
 
         public int ReadTimeOut { get; set; } = 1000;
 
-        public int IntervalTime { get; set; } = 10;
+        public int IntervalTime { get; set; } = 20;
 
         public int RetryCount { get; set; } = 3;
     }

@@ -11,29 +11,36 @@ namespace Communication.ModBus.ModBusRTU
             if (buffer.Count < 5)
                 return false;
 
-            for (int i = 0; i <= buffer.Count -5; i++)
+            //int i = 0;
+            while (buffer.Count >= 5)
             {
-                byte id = buffer[i];
-                byte funcCode = buffer[i + 1];
+                byte id = buffer[0];
+                byte funcCode = buffer[1];
+
+                if (id != slaveID)
+                {
+                    buffer.RemoveAt(0);
+                    continue;
+                }
 
                 // 异常响应
-                if (id == slaveID && funcCode == (functionCode | 0x80))
+                if (funcCode == (functionCode | 0x80))
                 {
                     const int exceptionLength = 5;
 
-                    if (i + exceptionLength > buffer.Count)
+                    if (exceptionLength > buffer.Count)
                         return false;
 
-                    var candidate = buffer.Skip(i).Take(exceptionLength).ToArray();
+                    var candidate = buffer.Take(exceptionLength).ToArray();
 
                     if (ModBusHelper.ValidateCRC(candidate))
                     {
-                        buffer.RemoveRange(0, i + exceptionLength);
+                        buffer.RemoveRange(0, exceptionLength);
                         frame = candidate;
                         return true;
                     }
 
-                    buffer.RemoveAt(i); // CRC 错，丢弃一个字节继续扫描
+                    buffer.RemoveAt(0); // CRC 错，丢弃一个字节继续扫描
                     continue;
                 }
 
@@ -41,21 +48,21 @@ namespace Communication.ModBus.ModBusRTU
                 if ( (id == slaveID && functionCode == funcCode) 
                     && (functionCode == 0x01 || functionCode == 0x02 || functionCode == 0x03 || functionCode == 0x04))
                 {
-                    int byteCount = buffer[i + 2];
+                    int byteCount = buffer[2];
                     var expectedLength = 3 + byteCount + 2;
 
-                    if (buffer.Count < i + expectedLength)
+                    if (buffer.Count < expectedLength)
                         return false;
 
-                    var candidate = buffer.Skip(i).Take(expectedLength).ToArray();
+                    var candidate = buffer.Take(expectedLength).ToArray();
 
                     if (ModBusHelper.ValidateCRC(candidate))
                     {
-                        buffer.RemoveRange(0, i + expectedLength);
+                        buffer.RemoveRange(0, expectedLength);
                         frame = candidate;
                         return true;
                     }
-                    buffer.RemoveAt(i);
+                    buffer.RemoveAt(0);
                     continue;
                 }
 
@@ -65,22 +72,23 @@ namespace Communication.ModBus.ModBusRTU
                 {
                     var expectedLength = 8;
 
-                    if (i + expectedLength > buffer.Count)
+                    if (expectedLength > buffer.Count)
                         return false;
 
-                    var candidate = buffer.Skip(i).Take(expectedLength).ToArray();
+                    var candidate = buffer.Take(expectedLength).ToArray();
 
                     if (ModBusHelper.ValidateCRC(candidate))
                     {
-                        buffer.RemoveRange(0, i + expectedLength);
+                        buffer.RemoveRange(0, expectedLength);
                         frame = candidate;
                         return true;
                     }
-                    buffer.RemoveAt(i);
+                    buffer.RemoveAt(0);
                     continue;
                 }
 
-                buffer.RemoveAt(i);
+                // 当ID匹配，但是功能码不匹配时，其实这部分还能有点补充，例如 0x07， 0x08， 0x14， 0x15等
+                buffer.RemoveAt(0);
                 continue;
             }
 
