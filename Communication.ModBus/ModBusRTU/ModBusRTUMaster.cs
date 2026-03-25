@@ -4,18 +4,20 @@ using System.IO.Ports;
 
 namespace Communication.ModBus.ModBusRTU
 {
-    public sealed class ModBusRTUMaster(ModBusRTUConfig config) : IModBus
+    public sealed class ModBusRTUMaster(ISerilog logger, ModBusRTUConfig config) : IModBus
     {
-        private readonly SerialPort serialPort = new();
-        private readonly SemaphoreSlim requestLock = new SemaphoreSlim(1, 1);
         private bool disposed;
+        private readonly ISerilog logger = logger;
+
         public bool IsConnected => serialPort.IsOpen;
+        private readonly SerialPort serialPort = new();
+        private readonly SemaphoreSlim requestLock = new(1, 1);
         public ModBusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
 
         public bool Connect()
         {
             ThrowIfDisposed();
-
+            logger.Debug("test");
             if (serialPort.IsOpen)
                 Disconnect();
 
