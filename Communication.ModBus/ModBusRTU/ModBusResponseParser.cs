@@ -32,7 +32,7 @@ namespace Communication.ModBus.ModBusRTU
                 var b = response[3 + i];
 
                 // 每个字节包含8个线圈状态，依次解析
-                for (int j = 0; j < 8; j++)
+                for (int j = 0; j < expectedByteCount; j++)
                     result[j] = ((b & (1 << j)) != 0);
             }
             return Result<bool[]>.Success(result);

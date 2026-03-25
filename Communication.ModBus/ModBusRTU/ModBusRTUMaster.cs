@@ -17,7 +17,6 @@ namespace Communication.ModBus.ModBusRTU
         public bool Connect()
         {
             ThrowIfDisposed();
-            logger.Debug("test");
             if (serialPort.IsOpen)
                 Disconnect();
 
@@ -37,6 +36,8 @@ namespace Communication.ModBus.ModBusRTU
 
         private void ConfigurePort()
         {
+            if (IsConnected) return;
+
             serialPort.PortName = Config.PortName;
             serialPort.BaudRate = Config.BaudRate;
             serialPort.Parity = Config.Parity;
@@ -45,8 +46,8 @@ namespace Communication.ModBus.ModBusRTU
             serialPort.DtrEnable = Config.DtrEnable;
             serialPort.RtsEnable = Config.RtsEnable;
 
-            serialPort.ReadTimeout = Timeout.Infinite;
-            serialPort.WriteTimeout = Timeout.Infinite;
+            serialPort.ReadTimeout = Config.ReadTimeOut;
+            serialPort.WriteTimeout = Config.WriteTimeOut;
         }
 
         public void Disconnect()
@@ -87,15 +88,12 @@ namespace Communication.ModBus.ModBusRTU
             ThrowIfDisposed();
             string lastError = string.Empty;
 
-            var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            writeTimeout.CancelAfter(Config.WriteTimeOut);
-
             try
             {
                 await requestLock.WaitAsync(token);
 
                 // 重试
-                for (int i = 0; i < Config.RetryCount; i++)
+                for (int i = 0; i <= Config.RetryCount; i++)
                 {
                     token.ThrowIfCancellationRequested();
 
@@ -105,8 +103,7 @@ namespace Communication.ModBus.ModBusRTU
                         this.serialPort.DiscardOutBuffer();
 
                         // 异步处理
-                        await serialPort.BaseStream.WriteAsync(request, writeTimeout.Token);
-                        await serialPort.BaseStream.FlushAsync(token);
+                        await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
                         var receiveResult = await ReceiveFrameAsync(slaveID, functionCode, token);
 
                         if (!receiveResult.IsSuccess)
@@ -116,8 +113,9 @@ namespace Communication.ModBus.ModBusRTU
                         }
                         return parser(receiveResult.Data!);
                     }
-                    catch (OperationCanceledException)
+                    catch (TimeoutException)
                     {
+                        //logger.Tx("Write timeout");
                         throw;
                     }
                     catch (Exception ex)
@@ -135,10 +133,6 @@ namespace Communication.ModBus.ModBusRTU
 
         private async Task<Result<byte[]>> ReceiveFrameAsync(byte slaveID, byte funcCode, CancellationToken token)
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutCts.CancelAfter(Config.ReadTimeOut);
-
-            var timeoutToken = timeoutCts.Token;
             var buffer = new List<byte>(256);
             var temp = new byte[256];
 
@@ -146,23 +140,40 @@ namespace Communication.ModBus.ModBusRTU
             {
                 while (true)
                 {
+                    // 响应外部的全局取消请求（比如用户点击了停止按钮）
                     token.ThrowIfCancellationRequested();
 
-                    var count = await this.serialPort.BaseStream.ReadAsync(temp, 0, temp.Length, timeoutToken);
+                    int count = 0;
+                    try
+                    {
+                        // 使用 Task.Run 包装同步 Read 方法
+                        // 这样既能真正响应串口的 2000ms ReadTimeout，又能在等待期间不阻塞主线程
+                        count = await Task.Run(() => this.serialPort.Read(temp, 0, temp.Length), token);
+                    }
+                    catch (TimeoutException)
+                    {
+                        // 当 2000ms 没有读到任何数据时，原生 Read 方法会抛出 TimeoutException
+                        // 对于 Modbus RTU 来说，帧超时通常意味着读取失败或从站没响应
+                        return Result<byte[]>.Fail("读取从站超时 (2000ms)");
+                    }
 
                     if (count <= 0) continue;
 
                     buffer.AddRange(temp.AsSpan(0, count));
-                    //buffer.AddRange(temp.AsSpan(0, count).ToArray());
 
+                    // 尝试解析 Modbus 帧
                     if (ModBusRTUFrame.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
+                    {
                         return Result<byte[]>.Success(frame);
+                    }
 
-                    await Task.Delay(Config.IntervalTime, token);   // 等待帧
+                    // 如果还没凑够一帧，稍微等待一下给Slave一点缓冲时间
+                    await Task.Delay(Config.IntervalTime, token);
                 }
             }
             catch (OperationCanceledException oex)
             {
+                // 捕获到全局 token 被取消（比如用户主动停止通讯）
                 if (token.IsCancellationRequested)
                     throw;
                 return Result<byte[]>.Fail(oex.ToString());

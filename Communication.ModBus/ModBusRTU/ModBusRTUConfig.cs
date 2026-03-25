@@ -18,12 +18,12 @@ namespace Communication.ModBus.ModBusRTU
 
         public bool RtsEnable { get; set;} = false;
 
-        public int WriteTimeOut { get; set; } = 1000;
+        public int WriteTimeOut { get; set; } = 2000;
 
-        public int ReadTimeOut { get; set; } = 1000;
+        public int ReadTimeOut { get; set; } = 2000;
 
-        public int IntervalTime { get; set; } = 20;
+        public int IntervalTime { get; set; } = 25;
 
-        public int RetryCount { get; set; } = 3;
+        public int RetryCount { get; set; } = 0;
     }
 }

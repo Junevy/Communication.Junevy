@@ -1,0 +1,56 @@
+﻿<Window
+    x:Class="Communication.Test.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Communication.Test"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="MainWindow"
+    Width="800"
+    Height="450"
+    d:DataContext="{d:DesignInstance Type=local:MainWindowViewModel}"
+    mc:Ignorable="d">
+    <StackPanel HorizontalAlignment="Left">
+        <TextBlock Text="Port Name" />
+        <ComboBox
+            Width="120"
+            ItemsSource="{Binding Serials}"
+            SelectedItem="{Binding Config.PortName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <TextBlock Text="Baud Rate" />
+        <TextBox Width="120" Text="{Binding Config.BaudRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <TextBlock Text="Bits" />
+        <TextBox Width="120" Text="{Binding Config.DataBits}" />
+
+        <TextBlock Text="Parity" />
+        <TextBox Width="120" Text="{Binding Config.Parity}" />
+
+        <TextBlock Text="Stop Bit" />
+        <TextBox Width="120" Text="{Binding Config.StopBits}" />
+
+        <Button
+            Width="120"
+            Command="{Binding ConnectCommand}"
+            Content="connect" />
+
+
+        <TextBlock Text="Slave ID" />
+        <TextBox Width="120" Text="{Binding Cmd.SlaveId}" />
+
+        <TextBlock Text="Function Code" />
+        <TextBox Width="120" Text="{Binding Cmd.FunctionCode}" />
+
+        <TextBlock Text="Start" />
+        <TextBox Width="120" Text="{Binding Cmd.Start}" />
+
+        <TextBlock Text="Count" />
+        <TextBox Width="120" Text="{Binding Cmd.Count}" />
+
+        <Button
+            Width="120"
+            Command="{Binding ReadCoilsCommand}"
+            Content="Read Coils" />
+
+    </StackPanel>
+</Window>
