@@ -6,51 +6,182 @@
     xmlns:local="clr-namespace:Communication.Test"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="MainWindow"
-    Width="800"
-    Height="450"
+    Width="665"
+    Height="380"
     d:DataContext="{d:DesignInstance Type=local:MainWindowViewModel}"
     mc:Ignorable="d">
-    <StackPanel HorizontalAlignment="Left">
-        <TextBlock Text="Port Name" />
-        <ComboBox
-            Width="120"
-            ItemsSource="{Binding Serials}"
-            SelectedItem="{Binding Config.PortName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-        <TextBlock Text="Baud Rate" />
-        <TextBox Width="120" Text="{Binding Config.BaudRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+    <Window.Resources>
+        <local:BoolToColorConverter x:Key="BoolToColor" />
+        <local:ReverseBoolConverter x:Key="ReverseBool" />
+        <local:EnumToBoolConverter x:Key="EnumToBool" />
+    </Window.Resources>
 
-        <TextBlock Text="Bits" />
-        <TextBox Width="120" Text="{Binding Config.DataBits}" />
-
-        <TextBlock Text="Parity" />
-        <TextBox Width="120" Text="{Binding Config.Parity}" />
-
-        <TextBlock Text="Stop Bit" />
-        <TextBox Width="120" Text="{Binding Config.StopBits}" />
-
-        <Button
-            Width="120"
-            Command="{Binding ConnectCommand}"
-            Content="connect" />
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
 
-        <TextBlock Text="Slave ID" />
-        <TextBox Width="120" Text="{Binding Cmd.SlaveId}" />
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition MaxHeight="20" />
+            </Grid.RowDefinitions>
 
-        <TextBlock Text="Function Code" />
-        <TextBox Width="120" Text="{Binding Cmd.FunctionCode}" />
+            <GroupBox
+                Grid.Row="0"
+                Margin="5,5,5,0"
+                Header="ModBus RTU Test">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-        <TextBlock Text="Start" />
-        <TextBox Width="120" Text="{Binding Cmd.Start}" />
+                    <StackPanel
+                        Grid.Column="0"
+                        Margin="15,10,10,10"
+                        HorizontalAlignment="Left">
+                        <TextBlock Text="Port Name" />
+                        <ComboBox
+                            Width="120"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
+                            ItemsSource="{Binding Serials}"
+                            SelectedItem="{Binding Config.PortName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-        <TextBlock Text="Count" />
-        <TextBox Width="120" Text="{Binding Cmd.Count}" />
+                        <TextBlock Margin="0,10,0,0" Text="Baud Rate" />
+                        <ComboBox
+                            Width="120"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
+                            ItemsSource="{Binding BaudRates}"
+                            SelectedValue="{Binding Config.BaudRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-        <Button
-            Width="120"
-            Command="{Binding ReadCoilsCommand}"
-            Content="Read Coils" />
+                        <TextBlock Margin="0,10,0,0" Text="Data Bits" />
+                        <ComboBox
+                            Width="120"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
+                            ItemsSource="{Binding Bits}"
+                            SelectedValue="{Binding Config.DataBits, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-    </StackPanel>
+                        <TextBlock Margin="0,10,0,0" Text="Parity" />
+                        <ComboBox
+                            Width="120"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
+                            ItemsSource="{Binding Parities}"
+                            SelectedValue="{Binding Config.Parity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Margin="0,10,0,0" Text="Stop Bit" />
+                        <ComboBox
+                            Width="120"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
+                            ItemsSource="{Binding Stops}"
+                            SelectedValue="{Binding Config.StopBits, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Margin="0,10,10,10"
+                        HorizontalAlignment="Left">
+
+                        <TextBlock Text="Slave ID" />
+                        <TextBox
+                            Width="120"
+                            Height="20"
+                            FontSize="12"
+                            Text="{Binding Cmd.SlaveId}" />
+
+                        <TextBlock Margin="0,10,0,0" Text="Start" />
+                        <TextBox
+                            Width="120"
+                            Height="20"
+                            FontSize="12"
+                            Text="{Binding Cmd.Start}" />
+
+                        <TextBlock Margin="0,10,0,0" Text="Length" />
+                        <TextBox
+                            Width="120"
+                            Height="20"
+                            FontSize="12"
+                            Text="{Binding Cmd.Count}" />
+
+                        <TextBlock Margin="0,10,0,0" Text="Region" />
+                        <ComboBox
+                            Width="120"
+                            ItemsSource="{Binding RegionList}"
+                            SelectedValue="{Binding CurrentRegion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Button
+                            Width="120"
+                            Height="20"
+                            Margin="0,10,0,0"
+                            Command="{Binding ConnectCommand}"
+                            Content="Connect"
+                            IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}" />
+
+                        <Button
+                            Width="120"
+                            Height="20"
+                            Margin="0,10,0,0"
+                            Command="{Binding ReadCommand}"
+                            Content="Read"
+                            IsEnabled="{Binding IsConnected}" />
+
+                        <Button
+                            Width="120"
+                            Height="20"
+                            Margin="0,10,0,0"
+                            Command="{Binding DisconnectCommand}"
+                            Content="Disconnect"
+                            IsEnabled="{Binding IsConnected}" />
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition MaxWidth="30" />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <Ellipse
+                    Grid.Column="0"
+                    Width="10"
+                    Height="10"
+                    Margin="10,0,0,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Fill="{Binding IsConnected, Converter={StaticResource BoolToColor}}" />
+
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Text="{Binding Config.PortName}" />
+            </Grid>
+        </Grid>
+
+
+        <DataGrid
+            Grid.Column="1"
+            Width="300"
+            AutoGenerateColumns="False"
+            EnableRowVirtualization="True"
+            HeadersVisibility="Column"
+            HorizontalScrollBarVisibility="Hidden"
+            IsReadOnly="{Binding CurrentRegion, Converter={StaticResource EnumToBool}}"
+            ItemsSource="{Binding DataList}"
+            VerticalScrollBarVisibility="Hidden">
+            <DataGrid.Columns>
+                <DataGridTextColumn
+                    Width="100"
+                    Binding="{Binding Address}"
+                    Header="0x" />
+                <DataGridTextColumn
+                    Width="200"
+                    Binding="{Binding Value}"
+                    Header="Value" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+
 </Window>

@@ -9,6 +9,8 @@ namespace Communication.ModBus.ModBusRTU
         private bool disposed;
         private readonly ISerilog logger = logger;
 
+        //public event Action<bool>? StateChanged;
+
         public bool IsConnected => serialPort.IsOpen;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
@@ -38,16 +40,24 @@ namespace Communication.ModBus.ModBusRTU
         {
             if (IsConnected) return;
 
-            serialPort.PortName = Config.PortName;
-            serialPort.BaudRate = Config.BaudRate;
-            serialPort.Parity = Config.Parity;
-            serialPort.DataBits = Config.DataBits;
-            serialPort.StopBits = Config.StopBits;
-            serialPort.DtrEnable = Config.DtrEnable;
-            serialPort.RtsEnable = Config.RtsEnable;
+            try
+            {
+                serialPort.PortName = Config.PortName;
+                serialPort.BaudRate = Config.BaudRate;
+                serialPort.Parity = Config.Parity;
+                serialPort.DataBits = Config.DataBits;
+                serialPort.StopBits = Config.StopBits;
+                serialPort.DtrEnable = Config.DtrEnable;
+                serialPort.RtsEnable = Config.RtsEnable;
 
-            serialPort.ReadTimeout = Config.ReadTimeOut;
-            serialPort.WriteTimeout = Config.WriteTimeOut;
+                serialPort.ReadTimeout = Config.ReadTimeOut;
+                serialPort.WriteTimeout = Config.WriteTimeOut;
+            }
+            catch (Exception ex)
+            {
+
+            }
+
         }
 
         public void Disconnect()
@@ -56,31 +66,34 @@ namespace Communication.ModBus.ModBusRTU
             {
                 if (!IsConnected)
                     serialPort.Close();
+                this.serialPort.Dispose();
             }
             catch { }
         }
 
         #region Read Coils _ 01H
-        public Result<bool[]> ReadCoils(byte slaveID, ushort start, ushort length)
+        public Result<byte[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
         {
-            return ReadCoilsAsync(slaveID, start, length).GetAwaiter().GetResult();
+            return ReadAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
         }
 
-        public async Task<Result<bool[]>> ReadCoilsAsync(byte slaveID, ushort start, ushort length, CancellationToken token = default)
+        public async Task<Result<byte[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
         {
             if (!IsConnected)
-                return Result<bool[]>.Fail("Port not open.");
+                return Result<byte[]>.Fail("Port not open.");
 
             if (length == 0)
-                return Result<bool[]>.Fail("Read length can not be 0!");
+                return Result<byte[]>.Fail("Read length can not be 0!");
 
-            byte[] request = ModBusHelper.BuildReadFrame(slaveID, 0x01, start, length);
+            byte[] request = ModBusHelper.BuildReadFrame(slaveID, (byte)functionCode, start, length);
 
-            return await ExecuteReadAsync(request, slaveID, 0x01, response =>
+            return await ExecuteReadAsync(request, slaveID, (byte)functionCode, response =>
             {
-                return ModBusResponseParser.ParseReadCoils(response, slaveID, 0x01, length);
+                return ModBusResponseParser.ParseReadBytes(response, slaveID, functionCode, length);
             }, token);
+
         }
+        #endregion
 
         private async Task<Result<T>> ExecuteReadAsync<T>(byte[] request, byte slaveID, byte functionCode,
             Func<byte[], Result<T>> parser, CancellationToken token = default)
@@ -183,7 +196,6 @@ namespace Communication.ModBus.ModBusRTU
                 return Result<byte[]>.Fail(e.ToString());
             }
         }
-        #endregion
 
         public void Dispose()
         {

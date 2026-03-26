@@ -6,7 +6,7 @@ namespace Communication.ModBus.ModBusRTU
     {
         public static bool TryExtractResponseFrame(List<byte> buffer, byte slaveID, byte functionCode, out byte[] frame)
         {
-            frame = Array.Empty<byte>();
+            frame = [];
 
             if (buffer.Count < 5)
                 return false;
@@ -93,9 +93,7 @@ namespace Communication.ModBus.ModBusRTU
             }
 
             if (buffer.Count > 1024)
-            {
                 buffer.RemoveRange(0, buffer.Count - 256);
-            }
 
             return false;
         }

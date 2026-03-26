@@ -1,6 +1,4 @@
-﻿using static System.Runtime.InteropServices.JavaScript.JSType;
-
-namespace Communication.ModBus.Common
+﻿namespace Communication.ModBus.Common
 {
     public class Result<T>
     {
@@ -10,6 +8,7 @@ namespace Communication.ModBus.Common
 
         public string? ErrorMessage { get; set; }
 
+        public ushort? Address { get; set; }
 
         public static Result<T> Success(T data) => new() { IsSuccess = true, Data = data };
         public static Result<T> Fail(string errMsg, T data = default)
