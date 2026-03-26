@@ -1,42 +1,49 @@
 ﻿using Communication.ModBus.Common;
-using System.Numerics;
 
 namespace Communication.ModBus.ModBusRTU
 {
     internal class ModBusResponseParser
     {
-        public static Result<byte[]> ParseReadBytes(byte[] response, byte slaveID, int functionCode, ushort length)
+        public static Result<ushort[]> ParseReadBytes(byte[] response, byte slaveID, int functionCode, ushort length)
         {
             var r = CheckFrame(response, slaveID, functionCode, length);
             if (!r.IsSuccess)
-                return Result<byte[]>.Fail("Verify Frame is failed.");
+                return Result<ushort[]>.Fail("Verify Frame is failed.");
 
             return functionCode switch
             {
-                0x01 => Result<byte[]>.Success(ParseCoils(response, length)),
-                0x03 => Result<byte[]>.Success(ParseRegister(response, length)),
-                _ => Result<byte[]>.Fail("The function code not support."),
+                0x01 => Result<ushort[]>.Success(ParseCoils(response, length)),
+                0x03 => Result<ushort[]>.Success(ParseRegisters(response, length)),
+                _ => Result<ushort[]>.Fail("The function code not support."),
             };
         }
 
-        private static byte[] ParseCoils(byte[] response, ushort length)
+        private static ushort[] ParseCoils(byte[] response, ushort length)
         {
-            byte[] result = new byte[length];
+            ushort[] result = new ushort[length];
 
             for (int i = 0; i < length; i++)
             {
-                int byteIndex = i / 8;
-                int bitIndex = i % 8;
-                result[i] = (byte)((response[3 + byteIndex] & (1 << bitIndex)));
-
+                int byteIndex = i / 8;     // 第几个字节
+                int bitIndex = i % 8;      // 第几位（低位在前）
+                                           // 获取 0 或 1
+                result[i] = (ushort)((response[3 + byteIndex] >> bitIndex) & 0x01);
             }
+
             return result;
         }
 
-        private static byte[] ParseRegister(byte[] response, ushort length)
+        private static ushort[] ParseRegisters(byte[] response, ushort length)
         {
-            var result = new byte[length * 2];
-            Array.Copy(response, 3, result, 0, length * 2);    // 该报文2字节起
+            ushort[] result = new ushort[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                int index = 3 + i * 2;
+
+                result[i] = (ushort)((response[index] << 8) | response[index + 1]);
+            }
+
             return result;
         }
 

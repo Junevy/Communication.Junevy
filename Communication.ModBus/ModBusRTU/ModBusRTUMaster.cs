@@ -9,8 +9,6 @@ namespace Communication.ModBus.ModBusRTU
         private bool disposed;
         private readonly ISerilog logger = logger;
 
-        //public event Action<bool>? StateChanged;
-
         public bool IsConnected => serialPort.IsOpen;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
@@ -72,18 +70,18 @@ namespace Communication.ModBus.ModBusRTU
         }
 
         #region Read Coils _ 01H
-        public Result<byte[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
+        public Result<ushort[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
         {
             return ReadAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
         }
 
-        public async Task<Result<byte[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
+        public async Task<Result<ushort[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
         {
             if (!IsConnected)
-                return Result<byte[]>.Fail("Port not open.");
+                return Result<ushort[]>.Fail("Port not open.");
 
             if (length == 0)
-                return Result<byte[]>.Fail("Read length can not be 0!");
+                return Result<ushort[]>.Fail("Read length can not be 0!");
 
             byte[] request = ModBusHelper.BuildReadFrame(slaveID, (byte)functionCode, start, length);
 

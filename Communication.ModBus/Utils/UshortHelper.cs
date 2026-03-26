@@ -1,4 +1,6 @@
-﻿namespace Communication.ModBus.Utils
+﻿using System.Buffers.Binary;
+
+namespace Communication.ModBus.Utils
 {
     /// <summary>
     /// Ushort类型的工具类，提供将ushort转换为字节数组的方法，以及从字节数组转换回ushort的方法。
@@ -42,6 +44,20 @@
         public static ushort ToUInt16(byte lowByte, byte highByte)
         {
             return (ushort)((highByte << 8) | lowByte);
+        }
+
+        public static ushort[] ToUShortArray(byte[] bytes)
+        {
+            int len = bytes.Length / 2;
+            ushort[] result = new ushort[len];
+
+            for (int i = 0; i < len; i++)
+            {
+                result[i] = BinaryPrimitives.ReadUInt16BigEndian(
+                    bytes.AsSpan(i * 2, 2));
+            }
+
+            return result;
         }
     }
 }
