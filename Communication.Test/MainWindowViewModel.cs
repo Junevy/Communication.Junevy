@@ -20,13 +20,14 @@ namespace Communication.Test
         }
 
         #region observable collection
-        public ObservableCollection<ModBusData> DataList { get; set; } = new();
-        public ObservableCollection<string> Serials { get; private set; } = [];
-        public ObservableCollection<Regions> RegionList { get; private set; } = [];
-        public ObservableCollection<Parity> Parities { get; private set; } = [];
-        public ObservableCollection<StopBits> Stops { get; private set; } = [];
-        public ObservableCollection<int> Bits { get; private set; } = [];
-        public ObservableCollection<int> BaudRates { get; private set; } = [];
+        public ObservableCollection<ModBusData> DataList { get; set; } = [];
+        public ObservableCollection<string> Serials { get; private set; } = new(SerialPort.GetPortNames());
+
+        public Array ParityList => Enum.GetValues(typeof(Parity));
+        public Array StopBitsList => Enum.GetValues(typeof(StopBits));
+        public Array RegionList => Enum.GetValues(typeof(Regions));
+        public int[] Bits { get; private set; } = [5, 6, 7, 8];
+        public int[] BaudRates { get; private set; } = [9600, 19200, 38400, 57600, 115200];
         #endregion
 
         public ModBusRTUConfig Config { get; set; } = new();
@@ -39,7 +40,7 @@ namespace Communication.Test
         public MainWindowViewModel()
         {
             this.mr = new ModBusRTUMaster(log, Config);
-            Initialize();
+            StateMonitor();
         }
 
         [RelayCommand]
@@ -70,7 +71,7 @@ namespace Communication.Test
             };
 
             CancellationTokenSource tk = new();
-            var r = await mr.ReadAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, tk.Token);
+            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, tk.Token);
 
             if (r.IsSuccess && r.Data != null)
             {
@@ -86,6 +87,18 @@ namespace Communication.Test
             }
         }
 
+        public async Task WriteAsync(){
+            CancellationTokenSource tk = new();
+            var r = await mr.WriteAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, Tx.Data, tk.Token);
+            if (r.IsSuccess)
+            {
+                MessageBox.Show("Write success!");
+            }
+            else
+            {
+                MessageBox.Show($"Write failed! Exception code : {r.ExceptionCode}");
+            }
+        }
 
         [RelayCommand]
         public void Disconnect()
@@ -109,44 +122,6 @@ namespace Communication.Test
                     await Task.Delay(1000); // 轮询间隔
                 }
             });
-        }
-
-        private void Initialize()
-        {
-            var portName = SerialPort.GetPortNames();
-            foreach (var name in portName)
-            {
-                Serials.Add(name);
-            }
-
-            StateMonitor();
-
-            RegionList.Add(Regions.Coils_0x);
-            RegionList.Add(Regions.DiscreteInputs_1x);
-            RegionList.Add(Regions.InputRegister_3x);
-            RegionList.Add(Regions.HodingRegister_4x);
-
-            Parities.Add(Parity.Even);
-            Parities.Add(Parity.Odd);
-            Parities.Add(Parity.None);
-
-            Stops.Add(StopBits.One);
-            Stops.Add(StopBits.Two);
-            Stops.Add(StopBits.None);
-
-            Bits.Add(5);
-            Bits.Add(6);
-            Bits.Add(7);
-            Bits.Add(8);
-
-            BaudRates.Add(9600);
-            for (int i = 1; i <= 12; i++)
-            {
-                if (i % 2 == 0)
-                    BaudRates.Add(i * 9600);
-                if (i == 6)
-                    i = 11;
-            }
         }
 
     }

@@ -9,5 +9,7 @@ namespace Communication.ModBus.Common
         public ushort Start { get; set; } = 0x00;
 
         public ushort Length { get; set; } = 0x01;
+
+        public byte[] Data { get; set; } 
     }
 }

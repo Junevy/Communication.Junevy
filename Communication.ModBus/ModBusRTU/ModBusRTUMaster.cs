@@ -19,9 +19,7 @@ namespace Communication.ModBus.ModBusRTU
             ThrowIfDisposed();
             if (serialPort.IsOpen)
             {
-                
                 Disconnect();
-
             }
 
             ConfigurePort();
@@ -38,6 +36,10 @@ namespace Communication.ModBus.ModBusRTU
             return true;
         }
 
+        /// <summary>
+        /// 配置串口参数。
+        /// </summary>
+        /// <exception cref="Exception">当串口参数无效时，抛出异常。</exception>
         private void ConfigurePort()
         {
             if (IsConnected) return;
@@ -73,13 +75,13 @@ namespace Communication.ModBus.ModBusRTU
             catch { }
         }
 
-        #region Read Coils _ 01H
-        public Rx<ushort[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
+        #region Tx Execute
+        public Rx<ushort[]> Build_Execute_Tx(byte slaveID, ushort functionCode, ushort start, ushort length)
         {
-            return ReadAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
+            return Build_Execute_TxAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
         }
 
-        public async Task<Rx<ushort[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
+        public async Task<Rx<ushort[]>> Build_Execute_TxAsync(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? data = null, CancellationToken token = default)
         {
             if (!IsConnected)
                 return Rx<ushort[]>.Fail("Port not open.");
@@ -87,17 +89,25 @@ namespace Communication.ModBus.ModBusRTU
             if (length == 0)
                 return Rx<ushort[]>.Fail("Read length can not be 0!");
 
-            byte[] request = ModBusHelper.BuildReadFrame(slaveID, (byte)functionCode, start, length);
+            if ((functionCode == 0x05 || functionCode == 0x06 || functionCode == 0x0F || functionCode == 0x10) && data == null)
+                return Rx<ushort[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
 
-            return await ExecuteReadAsync(request, slaveID, (byte)functionCode, response =>
+            try
             {
-                return ModBusResponseParser.ParseReadBytes(response, slaveID, functionCode, length);
-            }, token);
-
+                byte[] request = ModBusHelper.BuildTxFrame(slaveID, (byte)functionCode, start, length, data);
+                return await ExecuteAsync(request, slaveID, (byte)functionCode, response =>
+                {
+                    return ModBusResponseParser.ParseRxBytes(response, slaveID, functionCode, length);
+                }, token);
+            }
+            catch (Exception ex)
+            {
+                return Rx<ushort[]>.Fail(ex.Message);
+            }
         }
         #endregion
 
-        private async Task<Rx<T>> ExecuteReadAsync<T>(byte[] request, byte slaveID, byte functionCode,
+        private async Task<Rx<T>> ExecuteAsync<T>(byte[] request, byte slaveID, byte functionCode,
             Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
@@ -119,7 +129,7 @@ namespace Communication.ModBus.ModBusRTU
 
                         // 异步处理
                         await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
-                        var receiveResult = await ReceiveFrameAsync(slaveID, functionCode, token);
+                        var receiveResult = await ReceiveRxAsync(slaveID, functionCode, token);
 
                         if (!receiveResult.IsSuccess)
                         {
@@ -146,7 +156,7 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        private async Task<Rx<byte[]>> ReceiveFrameAsync(byte slaveID, byte funcCode, CancellationToken token)
+        private async Task<Rx<byte[]>> ReceiveRxAsync(byte slaveID, byte funcCode, CancellationToken token)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];

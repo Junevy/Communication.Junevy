@@ -69,14 +69,14 @@
                         <ComboBox
                             Width="120"
                             IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
-                            ItemsSource="{Binding Parities}"
+                            ItemsSource="{Binding ParityList}"
                             SelectedValue="{Binding Config.Parity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
                         <TextBlock Margin="0,10,0,0" Text="Stop Bit" />
                         <ComboBox
                             Width="120"
                             IsEnabled="{Binding IsConnected, Converter={StaticResource ReverseBool}}"
-                            ItemsSource="{Binding Stops}"
+                            ItemsSource="{Binding StopBitsList}"
                             SelectedValue="{Binding Config.StopBits, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
 

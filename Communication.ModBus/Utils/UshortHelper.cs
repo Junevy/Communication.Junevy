@@ -22,6 +22,20 @@ namespace Communication.ModBus.Utils
         }
 
         /// <summary>
+        /// 获取byte[]类型的字节数组，低字节在前，高字节在后。
+        /// </summary>
+        /// <param name="datas">需要转为byte[]类型的byte[]值</param>
+        /// <returns>低字节在前，高字节在后的byte[]值</returns>
+        // public static byte[] ToBytesByLittleEndian(byte[] datas)
+        // {
+        //     return
+        //     [
+        //         ..datas, // 低字节
+        //         ..datas // 高字节
+        //     ];
+        // }
+
+        /// <summary>
         /// 获取ushort值的字节数组，高字节在前，低字节在后。
         /// </summary>
         /// <param name="value">需要转为byte[]类型的ushort值</param>
@@ -46,6 +60,11 @@ namespace Communication.ModBus.Utils
             return (ushort)((highByte << 8) | lowByte);
         }
 
+        /// <summary>
+        /// 将byte[]类型的字节数组转为ushort[]类型的数组
+        /// </summary>
+        /// <param name="bytes">需要转为ushort[]类型的byte[]值</param>
+        /// <returns>ushort[]类型的数组</returns>
         public static ushort[] ToUShortArray(byte[] bytes)
         {
             int len = bytes.Length / 2;
