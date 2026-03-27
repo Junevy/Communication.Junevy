@@ -1,6 +1,6 @@
 ﻿namespace Communication.ModBus.Common
 {
-    public class Result<T>
+    public class Rx<T>
     {
         public bool IsSuccess { get; set; }
 
@@ -10,8 +10,8 @@
 
         public ushort? Address { get; set; }
 
-        public static Result<T> Success(T data) => new() { IsSuccess = true, Data = data };
-        public static Result<T> Fail(string errMsg, T data = default)
+        public static Rx<T> Success(T data) => new() { IsSuccess = true, Data = data };
+        public static Rx<T> Fail(string errMsg, T? data = default)
         {
             return new() { IsSuccess = false, ErrorMessage = errMsg, Data = data };
         }

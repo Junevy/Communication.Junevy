@@ -31,6 +31,7 @@ namespace Communication.Test
 
         public ModBusRTUConfig Config { get; set; } = new();
         public MbCmd Cmd { get; set; } = new();
+        public Tx Tx { get; set; } = new();
 
         [ObservableProperty]
         private Regions currentRegion = Regions.Coils_0x;
@@ -57,9 +58,9 @@ namespace Communication.Test
         public async Task ReadAsync()
         {
             DataList.Clear();
-            var currentAdrs = Cmd.Start;
+            var currentAdrs = Tx.Start;
 
-            Cmd.FunctionCode = CurrentRegion switch
+            Tx.FunctionCode = CurrentRegion switch
             {
                 Regions.Coils_0x => 0x01,
                 Regions.DiscreteInputs_1x => 0x02,
@@ -69,7 +70,7 @@ namespace Communication.Test
             };
 
             CancellationTokenSource tk = new();
-            var r = await mr.ReadAsync((byte)Cmd.SlaveId, Cmd.FunctionCode, Cmd.Start, Cmd.Count, tk.Token);
+            var r = await mr.ReadAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, tk.Token);
 
             if (r.IsSuccess && r.Data != null)
             {
@@ -78,6 +79,10 @@ namespace Communication.Test
                     DataList.Add(new ModBusData() { Address = (ushort)currentAdrs, Value = b });
                     currentAdrs++;
                 }
+            }
+            else
+            {
+                DataList.Add(new ModBusData() { Address = 0x00, Value = 0x00});
             }
         }
 

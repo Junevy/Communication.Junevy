@@ -4,17 +4,17 @@ namespace Communication.ModBus.ModBusRTU
 {
     internal class ModBusResponseParser
     {
-        public static Result<ushort[]> ParseReadBytes(byte[] response, byte slaveID, int functionCode, ushort length)
+        public static Rx<ushort[]> ParseReadBytes(byte[] response, byte slaveID, int functionCode, ushort length)
         {
             var r = CheckFrame(response, slaveID, functionCode, length);
             if (!r.IsSuccess)
-                return Result<ushort[]>.Fail("Verify Frame is failed.");
+                return Rx<ushort[]>.Fail("Verify Frame is failed.");
 
             return functionCode switch
             {
-                0x01 => Result<ushort[]>.Success(ParseCoils(response, length)),
-                0x03 => Result<ushort[]>.Success(ParseRegisters(response, length)),
-                _ => Result<ushort[]>.Fail("The function code not support."),
+                0x01 => Rx<ushort[]>.Success(ParseCoils(response, length)),
+                0x03 => Rx<ushort[]>.Success(ParseRegisters(response, length)),
+                _ => Rx<ushort[]>.Fail("The function code not support."),
             };
         }
 
@@ -47,17 +47,17 @@ namespace Communication.ModBus.ModBusRTU
             return result;
         }
 
-        public static Result<byte[]> CheckFrame(byte[] response, byte slaveID, int functionCode, ushort length)
+        public static Rx<byte[]> CheckFrame(byte[] response, byte slaveID, int functionCode, ushort length)
         {
             if (response == null || response.Length < 5)
-                return Result<byte[]>.Fail("Frame can not be null or frame length < 5");
+                return Rx<byte[]>.Fail("Frame can not be null or frame length < 5");
 
             if (response[0] != slaveID || response[1] != functionCode)
-                return Result<byte[]>.Fail($"The slave id or function code error : {response[0]}, {response[1]}. " +
+                return Rx<byte[]>.Fail($"The slave id or function code error : {response[0]}, {response[1]}. " +
                     $"The actual slave id or function code : {slaveID}, {functionCode}");
 
             if ((response[1] & 0x80) != 0)
-                return Result<byte[]>.Fail($"The exception code : {response[2]}");
+                return Rx<byte[]>.Fail($"The exception code : {response[2]}");
 
             var byteCount = response[2];
             var expectedByteCount = 0;
@@ -68,12 +68,12 @@ namespace Communication.ModBus.ModBusRTU
                 expectedByteCount = (length + 7) / 8;
 
             if (byteCount != expectedByteCount)
-                return Result<byte[]>.Fail($"Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}.");
+                return Rx<byte[]>.Fail($"Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}.");
 
             if (response.Length < 3 + byteCount + 2)
-                return Result<byte[]>.Fail($"Invalid response length. Actual {response.Length}.");
+                return Rx<byte[]>.Fail($"Invalid response length. Actual {response.Length}.");
 
-            return Result<byte[]>.Success(response);
+            return Rx<byte[]>.Success(response);
         }
     }
 }

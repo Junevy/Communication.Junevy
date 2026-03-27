@@ -90,21 +90,21 @@
                             Width="120"
                             Height="20"
                             FontSize="12"
-                            Text="{Binding Cmd.SlaveId}" />
+                            Text="{Binding Tx.SlaveId}" />
 
                         <TextBlock Margin="0,10,0,0" Text="Start" />
                         <TextBox
                             Width="120"
                             Height="20"
                             FontSize="12"
-                            Text="{Binding Cmd.Start}" />
+                            Text="{Binding Tx.Start}" />
 
                         <TextBlock Margin="0,10,0,0" Text="Length" />
                         <TextBox
                             Width="120"
                             Height="20"
                             FontSize="12"
-                            Text="{Binding Cmd.Count}" />
+                            Text="{Binding Tx.Length}" />
 
                         <TextBlock Margin="0,10,0,0" Text="Region" />
                         <ComboBox

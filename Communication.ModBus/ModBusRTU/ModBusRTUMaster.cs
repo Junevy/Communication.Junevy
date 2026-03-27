@@ -18,7 +18,11 @@ namespace Communication.ModBus.ModBusRTU
         {
             ThrowIfDisposed();
             if (serialPort.IsOpen)
+            {
+                
                 Disconnect();
+
+            }
 
             ConfigurePort();
 
@@ -70,18 +74,18 @@ namespace Communication.ModBus.ModBusRTU
         }
 
         #region Read Coils _ 01H
-        public Result<ushort[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
+        public Rx<ushort[]> Read(byte slaveID, ushort functionCode, ushort start, ushort length)
         {
             return ReadAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
         }
 
-        public async Task<Result<ushort[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
+        public async Task<Rx<ushort[]>> ReadAsync(byte slaveID, ushort functionCode, ushort start, ushort length, CancellationToken token = default)
         {
             if (!IsConnected)
-                return Result<ushort[]>.Fail("Port not open.");
+                return Rx<ushort[]>.Fail("Port not open.");
 
             if (length == 0)
-                return Result<ushort[]>.Fail("Read length can not be 0!");
+                return Rx<ushort[]>.Fail("Read length can not be 0!");
 
             byte[] request = ModBusHelper.BuildReadFrame(slaveID, (byte)functionCode, start, length);
 
@@ -93,8 +97,8 @@ namespace Communication.ModBus.ModBusRTU
         }
         #endregion
 
-        private async Task<Result<T>> ExecuteReadAsync<T>(byte[] request, byte slaveID, byte functionCode,
-            Func<byte[], Result<T>> parser, CancellationToken token = default)
+        private async Task<Rx<T>> ExecuteReadAsync<T>(byte[] request, byte slaveID, byte functionCode,
+            Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
             string lastError = string.Empty;
@@ -134,7 +138,7 @@ namespace Communication.ModBus.ModBusRTU
                         lastError = ex.Message;
                     }
                 }
-                return Result<T>.Fail("Failed after retries.");
+                return Rx<T>.Fail("Failed after retries.");
             }
             finally
             {
@@ -142,7 +146,7 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        private async Task<Result<byte[]>> ReceiveFrameAsync(byte slaveID, byte funcCode, CancellationToken token)
+        private async Task<Rx<byte[]>> ReceiveFrameAsync(byte slaveID, byte funcCode, CancellationToken token)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -165,7 +169,7 @@ namespace Communication.ModBus.ModBusRTU
                     {
                         // 当 2000ms 没有读到任何数据时，原生 Read 方法会抛出 TimeoutException
                         // 对于 Modbus RTU 来说，帧超时通常意味着读取失败或从站没响应
-                        return Result<byte[]>.Fail("读取从站超时 (2000ms)");
+                        return Rx<byte[]>.Fail("读取从站超时 (2000ms)");
                     }
 
                     if (count <= 0) continue;
@@ -175,7 +179,7 @@ namespace Communication.ModBus.ModBusRTU
                     // 尝试解析 Modbus 帧
                     if (ModBusRTUFrame.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
                     {
-                        return Result<byte[]>.Success(frame);
+                        return Rx<byte[]>.Success(frame);
                     }
 
                     // 如果还没凑够一帧，稍微等待一下给Slave一点缓冲时间
@@ -187,11 +191,11 @@ namespace Communication.ModBus.ModBusRTU
                 // 捕获到全局 token 被取消（比如用户主动停止通讯）
                 if (token.IsCancellationRequested)
                     throw;
-                return Result<byte[]>.Fail(oex.ToString());
+                return Rx<byte[]>.Fail(oex.ToString());
             }
             catch (Exception e)
             {
-                return Result<byte[]>.Fail(e.ToString());
+                return Rx<byte[]>.Fail(e.ToString());
             }
         }
 
