@@ -1,5 +1,6 @@
 ﻿using Communication.ModBus.Common;
 using Communication.ModBus.ModBusRTU;
+using Communication.ModBus.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
@@ -65,13 +66,13 @@ namespace Communication.Test
             {
                 Regions.Coils_0x => 0x01,
                 Regions.DiscreteInputs_1x => 0x02,
-                Regions.InputRegister_3x => 0x03,
-                Regions.HodingRegister_4x => 0x04,
+                Regions.InputRegister_3x => 0x04,
+                Regions.HodingRegister_4x => 0x03,
                 _ => 0x01,
             };
 
             CancellationTokenSource tk = new();
-            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, tk.Token);
+            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, null, tk.Token);
 
             if (r.IsSuccess && r.Data != null)
             {
@@ -83,20 +84,21 @@ namespace Communication.Test
             }
             else
             {
-                DataList.Add(new ModBusData() { Address = 0x00, Value = 0x00});
+                var hexStr = r.Data?.UShortsToHexString();
+                MessageBox.Show(hexStr);
             }
         }
 
         public async Task WriteAsync(){
             CancellationTokenSource tk = new();
-            var r = await mr.WriteAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, Tx.Data, tk.Token);
+            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, Tx.Data, tk.Token);
             if (r.IsSuccess)
             {
                 MessageBox.Show("Write success!");
             }
             else
             {
-                MessageBox.Show($"Write failed! Exception code : {r.ExceptionCode}");
+                // MessageBox.Show($"Write failed! Exception code : {r.ExceptionCode}");
             }
         }
 

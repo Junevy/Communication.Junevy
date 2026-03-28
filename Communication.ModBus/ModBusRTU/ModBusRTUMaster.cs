@@ -75,12 +75,24 @@ namespace Communication.ModBus.ModBusRTU
             catch { }
         }
 
-        #region Tx Execute
-        public Rx<ushort[]> Build_Execute_Tx(byte slaveID, ushort functionCode, ushort start, ushort length)
+        /// <summary>
+        /// 构建执行请求。
+        /// </summary>
+        public Rx<ushort[]> Build_Execute_Tx(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? data = null, CancellationToken token = default)
         {
-            return Build_Execute_TxAsync(slaveID, functionCode, start, length).GetAwaiter().GetResult();
+            return Build_Execute_TxAsync(slaveID, functionCode, start, length, data, token).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// 构建执行请求。
+        /// </summary>
+        /// <param name="slaveID">从站ID。</param>
+        /// <param name="functionCode">功能码。</param>
+        /// <param name="start">起始地址。</param>
+        /// <param name="length">读取长度。</param>
+        /// <param name="data">需要写入的数据。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <returns>执行结果。</returns>
         public async Task<Rx<ushort[]>> Build_Execute_TxAsync(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? data = null, CancellationToken token = default)
         {
             if (!IsConnected)
@@ -97,7 +109,7 @@ namespace Communication.ModBus.ModBusRTU
                 byte[] request = ModBusHelper.BuildTxFrame(slaveID, (byte)functionCode, start, length, data);
                 return await ExecuteAsync(request, slaveID, (byte)functionCode, response =>
                 {
-                    return ModBusResponseParser.ParseRxBytes(response, slaveID, functionCode, length);
+                    return ModBusResponseParser.ParseRx(response, slaveID, functionCode, length);
                 }, token);
             }
             catch (Exception ex)
@@ -105,8 +117,16 @@ namespace Communication.ModBus.ModBusRTU
                 return Rx<ushort[]>.Fail(ex.Message);
             }
         }
-        #endregion
 
+        /// <summary>
+        /// 执行请求。
+        /// </summary>
+        /// <param name="request">请求数据。</param>
+        /// <param name="slaveID">从站ID。</param>
+        /// <param name="functionCode">功能码。</param>
+        /// <param name="parser">响应解析器。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <returns>执行结果。</returns>
         private async Task<Rx<T>> ExecuteAsync<T>(byte[] request, byte slaveID, byte functionCode,
             Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
@@ -156,6 +176,13 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
+        /// <summary>
+        /// 接收响应。
+        /// </summary>
+        /// <param name="slaveID">从站ID。</param>
+        /// <param name="funcCode">功能码。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <returns>执行结果。</returns>
         private async Task<Rx<byte[]>> ReceiveRxAsync(byte slaveID, byte funcCode, CancellationToken token)
         {
             var buffer = new List<byte>(256);
@@ -216,6 +243,9 @@ namespace Communication.ModBus.ModBusRTU
             serialPort.Dispose();
         }
 
+        /// <summary>
+        /// 检查是否已处置。
+        /// </summary>
         private void ThrowIfDisposed()
         {
             ObjectDisposedException.ThrowIf(disposed, this);

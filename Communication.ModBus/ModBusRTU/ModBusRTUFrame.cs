@@ -45,7 +45,7 @@ namespace Communication.ModBus.ModBusRTU
                 }
 
                 // Read
-                if ( (id == slaveID && functionCode == funcCode) 
+                if ( id == slaveID && functionCode == funcCode 
                     && (functionCode == 0x01 || functionCode == 0x02 || functionCode == 0x03 || functionCode == 0x04))
                 {
                     int byteCount = buffer[2];
