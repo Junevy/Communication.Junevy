@@ -40,11 +40,23 @@
             return bytes;
         }
 
+        /// <summary>
+        /// 将ushort值数组转换为十六进制字符串，高字节在前，低字节在后。
+        /// </summary>
+        /// <param name="ushorts">需要转为十六进制字符串的ushort值数组</param>
+        /// <param name="reject0X00">是否拒绝0x00字节（高字节位）</param>
+        /// <returns>转后的十六进制字符串</returns>
         public static string UShortsToHexString(this ushort[] ushorts, bool reject0X00 = true)
         {
             return BytesToHexString(ushorts.UShortsToByteArrayBigEndian(), reject0X00);
         }
 
+        /// <summary>
+        /// 将字节数组转换为十六进制字符串，高字节在前，低字节在后。
+        /// </summary>
+        /// <param name="bytes">需要转为十六进制字符串的字节数组</param>
+        /// <param name="reject0X00">是否拒绝0x00字节（高字节位）</param>
+        /// <returns>转后的十六进制字符串</returns>
         public static string BytesToHexString(this byte[] bytes, bool reject0X00 = true)
         {
             if (bytes == null || bytes.Length == 0)

@@ -58,39 +58,5 @@ namespace Communication.ModBus.Utils
 
             lastTimestamp = now;
         }
-
-        /// <summary>
-        /// 格式化发送日志
-        /// </summary>
-        //public static void Tx(string ip, byte[] data)
-        //{
-        //    long now = sw.ElapsedMilliseconds;
-
-        //    logger?.Debug(
-        //        "[TX] {IP} --> {Data}",
-        //        ip,
-        //        data.ToHex()
-        //    );
-
-        //    lastTimestamp = now;
-        //}
-
-        ///// <summary>
-        ///// 格式接收日志（自动计算时间差）
-        ///// </summary>
-        //public static void Rx(string ip, byte[] data)
-        //{
-        //    long now = sw.ElapsedMilliseconds;
-        //    long delta = now - lastTimestamp;
-
-        //    logger?.Debug(
-        //        "[RX] {IP} <-- {Data} (+{Delta} ms)",
-        //        ip,
-        //        data.ToHex(),
-        //        delta
-        //    );
-
-        //    lastTimestamp = now;
-        //}
     }
 }

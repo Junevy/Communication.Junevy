@@ -1,9 +1,8 @@
 ﻿using Communication.ModBus.Common;
-using Communication.ModBus.Utils;
 
 namespace Communication.ModBus.ModBusRTU
 {
-    internal class ModBusResponseParser
+    public class ModBusResponseParser
     {
         /// <summary>
         /// 解析 ModBus 响应数据，将数据转换为 ushort[] 类型。

@@ -13,19 +13,6 @@
         public static void AddCRC16(List<byte> frame)
             => frame.AddRange(CRC16.CRCLittleEndian(frame.ToArray()));
 
-        // public static byte[] BuildReadFrame(byte slaveID, byte functionCode, ushort start, ushort length)
-        // {
-        //     List<byte> frame =
-        //     [
-        //         slaveID,
-        //         functionCode,
-        //         .. UshortHelper.ToBytesByBigEndian(start),
-        //         .. UshortHelper.ToBytesByBigEndian(length),
-        //     ];
-
-        //     AddCRC16(frame);
-        //     return frame.ToArray();
-        // }
 
         /// <summary>
         /// 构建ModBus发送帧。

@@ -2,8 +2,16 @@
 
 namespace Communication.ModBus.ModBusRTU
 {
-    internal static class ModBusRTUFrame
+    public static class ModBusRTUFrame
     {
+        /// <summary>
+        /// 尝试提取响应报文。
+        /// </summary>
+        /// <param name="buffer">缓存区。</param>
+        /// <param name="slaveID">从站ID。</param>
+        /// <param name="functionCode">功能码。</param>
+        /// <param name="frame">提取到的报文。</param>
+        /// <returns>是否成功提取。</returns>
         public static bool TryExtractResponseFrame(List<byte> buffer, byte slaveID, byte functionCode, out byte[] frame)
         {
             frame = [];
