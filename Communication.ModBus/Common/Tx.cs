@@ -5,6 +5,12 @@ namespace Communication.ModBus.Common
     /// </summary>
     public class Tx
     {
+
+        /// <summary>
+        /// 功能码改变事件。
+        /// </summary>
+        public event Action<FunctionCode>? OnFunctionCodeChanged;
+
         /// <summary>
         /// 从站ID。
         /// </summary>
@@ -13,7 +19,15 @@ namespace Communication.ModBus.Common
         /// <summary>
         /// 功能码。
         /// </summary>
-        public ushort FunctionCode { get; set; } = 0x01;
+        private FunctionCode functionCode = FunctionCode.ReadCoils;
+        public FunctionCode FunctionCode 
+        {
+            get => functionCode;
+            set {
+                functionCode = value;
+                InvokeOnFunctionCodeChanged();  // 调用事件
+            }
+        }
 
         /// <summary>
         /// 起始地址。
@@ -29,5 +43,14 @@ namespace Communication.ModBus.Common
         /// 数据。
         /// </summary>
         public byte[]? Data { get; set; }
+
+
+        /// <summary>
+        /// 功能码改变事件。
+        /// </summary>
+        public void InvokeOnFunctionCodeChanged()
+        {
+            OnFunctionCodeChanged?.Invoke(FunctionCode);
+        }
     }
 }

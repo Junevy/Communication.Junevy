@@ -11,11 +11,11 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="slaveID">从站 ID。</param>
         /// <param name="functionCode">功能码。</param>
         /// <param name="length">读取内容的长度。</param>
-        /// <param name="data">需要写入的数据。</param>
+        /// <param name="writeData">需要写入的数据。</param>
         /// <returns>读取到的ushort[] 类型的值。</returns>
-        public static Rx<ushort[]> ParseRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? data = null)
+        public static Rx<ushort[]> ParseRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? writeData = null)
         {
-            var r = CheckRx(response, slaveID, functionCode, length, data);
+            var r = CheckRx(response, slaveID, functionCode, length, writeData);
             if (!r.IsSuccess)
                 return Rx<ushort[]>.Fail(r.ErrorMessage ?? "Check Frame is failed.", r.Data?.Select(b => (ushort)b).ToArray());
 
@@ -58,23 +58,24 @@ namespace Communication.ModBus.ModBusRTU
             return result;
         }
 
-        public static Rx<byte[]> CheckRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? data = null)
+        public static Rx<byte[]> CheckRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? writeData = null)
         {
             if (response == null || response.Length < 5)
                 return Rx<byte[]>.Fail("Frame can not be null or frame length < 5", response);
 
-            if (response[0] != slaveID || response[1] != functionCode)
-                return Rx<byte[]>.Fail($"The slave id or function code error : {response[0]}, {response[1]}. " +
-                    $"The actual slave id or function code : {slaveID}, {functionCode}", response);
-
             if ((response[1] & 0x80) != 0)
                 return Rx<byte[]>.Fail($"The exception code : {response[2]}", response);
+
+            if (response[0] != slaveID || response[1] != functionCode)
+                return Rx<byte[]>.Fail($"The responsed slave id or function code error : {response[0]}, {response[1]}. " +
+                    $"The actual slave id or function code : {slaveID}, {functionCode}", response);
+
 
             return functionCode switch
             {
                 0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(response, functionCode, length),
-                0x05 or 0x06 => VerifyEchoRx(response, slaveID, functionCode, data),
-                0x0F or 0x10 => VerifyMultiWriteRx(response, slaveID, functionCode, length, data),
+                0x05 or 0x06 => VerifyEchoRx(response, slaveID, functionCode, writeData),
+                0x0F or 0x10 => VerifyMultiWriteRx(response, slaveID, functionCode, length, writeData),
                 _ => Rx<byte[]>.Fail("The function code not support.", response),
             };
         }
@@ -111,24 +112,24 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="response">请求数据。</param>
         /// <param name="slaveID">从站 ID。</param>
         /// <param name="functionCode">功能码。</param>
-        /// <param name="data">写入的数据</param>
+        /// <param name="writeData">写入的数据</param>
         /// <returns>验证结果。</returns>
-        public static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveID, int functionCode, byte[]? data = null)
+        public static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveID, int functionCode, byte[]? writeData = null)
         {
-            if (data == null)
+            if (writeData == null)
                 return Rx<byte[]>.Fail("The data is null.");
 
-            if (response.Length < data.Length + 6)
-                return Rx<byte[]>.Fail($"The request length is not equal to the data length. Actual {response.Length}, expected {data.Length + 6}.", response);
+            if (response.Length < writeData.Length + 6)
+                return Rx<byte[]>.Fail($"The request length is not equal to the data length. Actual {response.Length}, expected {writeData.Length + 6}.", response);
 
             if (response[0] != slaveID || response[1] != functionCode)
                 return Rx<byte[]>.Fail($"The slave id or function code error : {response[0]}, {response[1]}. " +
                     $"The actual slave id or function code : {slaveID}, {functionCode}", response);
 
-            for (int i = 4; i < data.Length; i++)
+            for (int i = 4; i < writeData.Length; i++)
             {
-                if (response[i] != data[i - 4])
-                    return Rx<byte[]>.Fail($"The data error. Actual {response}, expected {data}.", response);
+                if (response[i] != writeData[i - 4])
+                    return Rx<byte[]>.Fail($"The data compared error. Actual {response}, expected {writeData}.", response);
             }
 
             return Rx<byte[]>.Success(response);

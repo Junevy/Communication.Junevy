@@ -23,9 +23,10 @@
         /// <summary>
         /// 获取ushort值的字节数组，高字节在前，低字节在后。
         /// </summary>
-        /// <param name="ushorts">需要转为byte[]类型的ushort值</param>
+        /// <param name="ushorts">需要转为byte[]类型的ushort值数组</param>
+        /// <param name="reject0X00">是否拒绝0x00在高字节位</param>
         /// <returns>转后的byte[]值</returns>
-        public static byte[] UShortsToByteArrayBigEndian(this ushort[] ushorts)
+        public static byte[] ToByteArrayBigEndian(this ushort[] ushorts, bool reject0X00 = false)
         {
             if (ushorts == null || ushorts.Length == 0) return [];
 
@@ -37,6 +38,11 @@
                 bytes[i * 2 + 1] = (byte)(ushorts[i] & 0xFF);  // 低字节
             }
 
+            if (reject0X00)
+            {
+                bytes = bytes.Where(b => b != 0x00).ToArray();
+            }
+
             return bytes;
         }
 
@@ -44,20 +50,20 @@
         /// 将ushort值数组转换为十六进制字符串，高字节在前，低字节在后。
         /// </summary>
         /// <param name="ushorts">需要转为十六进制字符串的ushort值数组</param>
-        /// <param name="reject0X00">是否拒绝0x00字节（高字节位）</param>
+        /// <param name="reject0X00">是否拒绝0x00在高字节位</param>
         /// <returns>转后的十六进制字符串</returns>
-        public static string UShortsToHexString(this ushort[] ushorts, bool reject0X00 = true)
+        public static string ToHexString(this ushort[] ushorts, bool reject0X00 = false)
         {
-            return BytesToHexString(ushorts.UShortsToByteArrayBigEndian(), reject0X00);
+            return BytesToHexString(ushorts.ToByteArrayBigEndian(), reject0X00);
         }
 
         /// <summary>
         /// 将字节数组转换为十六进制字符串，高字节在前，低字节在后。
         /// </summary>
         /// <param name="bytes">需要转为十六进制字符串的字节数组</param>
-        /// <param name="reject0X00">是否拒绝0x00字节（高字节位）</param>
+        /// <param name="reject0X00">是否拒绝0x00在高字节位</param>
         /// <returns>转后的十六进制字符串</returns>
-        public static string BytesToHexString(this byte[] bytes, bool reject0X00 = true)
+        public static string BytesToHexString(this byte[] bytes, bool reject0X00 = false)
         {
             if (bytes == null || bytes.Length == 0)
                 return string.Empty;
@@ -65,7 +71,7 @@
             if (reject0X00)
             {
                 List<byte> buffer = [];
-                
+
                 for (int i = 0; i < bytes.Length; i++)
                 {
                     if (i % 2 == 1)
@@ -73,9 +79,9 @@
                         buffer.Add(bytes[i]);
                     }
                 }
-                return BitConverter.ToString([..buffer]);
+                return BitConverter.ToString([.. buffer]);
             }
-        
+
             // string format = withSpace ? "X2 " : "X2";
             return BitConverter.ToString(bytes);
 
@@ -99,14 +105,54 @@
         }
 
         /// <summary>
-        /// 将两个字节转为ushort值
+        /// 将两个字节转为ushort值，高字节在前，低字节在后。
         /// </summary>
         /// <param name="lowByte">低字节</param>
         /// <param name="highByte">高字节</param>
-        /// <returns></returns>
+        /// <returns>转后的ushort值</returns>
         public static ushort ToUInt16(byte lowByte, byte highByte)
         {
             return (ushort)((highByte << 8) | lowByte);
+        }
+
+        /// <summary>
+        /// 交换字节数组中每两个字节的位置
+        /// </summary>
+        /// <param name="bytes">需要交换的字节数组</param>
+        /// <returns>交换后的字节数组</returns>
+        public static byte[] SwapBytesInPairs(this byte[] bytes)
+        {
+            for (int i = 0; i < bytes.Length - 1; i += 2)
+            {
+                // 交换每两个字节
+                (bytes[i], bytes[i + 1]) = (bytes[i + 1], bytes[i]);
+            }
+            return bytes;
+        }
+
+        /// <summary>
+        /// 将所有从ushort[]转为byte[]的数组，高低字节任意不为0，则置为0xFF00，写入线圈时适用
+        /// </summary>
+        /// <param name="txData">需要处理的Modbus Write Data</param>
+        /// <returns>处理后的Modbus Write Data</returns>
+        public static byte[] SetBitToFF(this byte[] txData)
+        {
+            if (txData == null || txData.Length % 2 != 0)
+                throw new ArgumentException("请检查输入的Write Data");
+
+            for (int i = 0; i < txData.Length; i += 2)
+            {
+                byte high = txData[i];
+                byte low = txData[i + 1];
+
+                if (high != 0 || low != 0)   // 只要有一个不为0
+                {
+                    txData[i] = 0xFF;
+                    txData[i + 1] = 0x00;
+                }
+                // else: 都是 0x00，什么都不做，保持原样
+            }
+            return txData;
         }
     }
 }

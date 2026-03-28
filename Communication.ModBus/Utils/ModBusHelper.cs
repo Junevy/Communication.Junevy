@@ -1,4 +1,6 @@
-﻿namespace Communication.ModBus.Utils
+﻿using Communication.ModBus.Common;
+
+namespace Communication.ModBus.Utils
 {
     public static class ModBusHelper
     {
@@ -31,14 +33,13 @@
             if (data == null || data.Length <= 0)
             {
                 // 写操作，但没有数据提供
-                if (functionCode == 0x05 || functionCode == 0x06
-                || functionCode == 0x0F || functionCode == 0x10 || functionCode == 0x17)
+                if (functionCode >= (byte)FunctionCode.WriteCoils)
                 {
                     throw new ArgumentException("The data is empty.");
                 }
 
                 // 读操作不需要数据
-                if (functionCode == 0x01 || functionCode == 0x02 || functionCode == 0x03 || functionCode == 0x04)
+                if (functionCode < (byte)FunctionCode.WriteCoils)
                 {
                     frame =
                     [
@@ -52,13 +53,13 @@
             else
             {
                 // 写操作，有数据提供
-                if (functionCode == 0x05 || functionCode == 0x06
-                || functionCode == 0x0F || functionCode == 0x10 || functionCode == 0x17)
+                if (functionCode >= (byte)FunctionCode.WriteCoils)
                 {
                     frame =
                     [
                         slaveID,
                         functionCode,
+                        .. UshortHelper.ToBytesByBigEndian(start),
                         .. data ?? [],
                     ];
                 }

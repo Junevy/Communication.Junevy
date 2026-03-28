@@ -90,10 +90,10 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="functionCode">功能码。</param>
         /// <param name="start">起始地址。</param>
         /// <param name="length">读取长度。</param>
-        /// <param name="data">需要写入的数据。</param>
+        /// <param name="writeData">需要写入的数据。</param>
         /// <param name="token">取消令牌。</param>
         /// <returns>执行结果。</returns>
-        public async Task<Rx<ushort[]>> Build_Execute_TxAsync(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? data = null, CancellationToken token = default)
+        public async Task<Rx<ushort[]>> Build_Execute_TxAsync(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? writeData = null, CancellationToken token = default)
         {
             if (!IsConnected)
                 return Rx<ushort[]>.Fail("Port not open.");
@@ -101,15 +101,15 @@ namespace Communication.ModBus.ModBusRTU
             if (length == 0)
                 return Rx<ushort[]>.Fail("Read length can not be 0!");
 
-            if ((functionCode == 0x05 || functionCode == 0x06 || functionCode == 0x0F || functionCode == 0x10) && data == null)
+            if ((functionCode >= (ushort)FunctionCode.WriteCoils) && writeData == null)
                 return Rx<ushort[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
 
             try
             {
-                byte[] request = ModBusHelper.BuildTxFrame(slaveID, (byte)functionCode, start, length, data);
+                byte[] request = ModBusHelper.BuildTxFrame(slaveID, (byte)functionCode, start, length, writeData);
                 return await ExecuteAsync(request, slaveID, (byte)functionCode, response =>
                 {
-                    return ModBusResponseParser.ParseRx(response, slaveID, functionCode, length);
+                    return ModBusResponseParser.ParseRx(response, slaveID, functionCode, length, writeData);
                 }, token);
             }
             catch (Exception ex)

@@ -2,9 +2,13 @@
 {
     public enum Regions
     {
-        Coils_0x,
-        DiscreteInputs_1x,
-        InputRegister_3x,
-        HodingRegister_4x
+        ReadCoils_01H,
+        ReadDiscreteInputs_02H,
+        ReadInputRegister_03H,
+        ReadHodingRegister_04H,
+        WriteDiscreteInputs_05H,
+        WriteHodingRegister_06H,
+        WriteMultiCoils_0FH,
+        WriteMultiHodingRegister_10H,
     }
 }

@@ -26,7 +26,7 @@ namespace Communication.Test
 
         public Array ParityList => Enum.GetValues(typeof(Parity));
         public Array StopBitsList => Enum.GetValues(typeof(StopBits));
-        public Array RegionList => Enum.GetValues(typeof(Regions));
+        public Array RegionList => Enum.GetValues(typeof(FunctionCode));
         public int[] Bits { get; private set; } = [5, 6, 7, 8];
         public int[] BaudRates { get; private set; } = [9600, 19200, 38400, 57600, 115200];
         #endregion
@@ -35,12 +35,16 @@ namespace Communication.Test
         public MbCmd Cmd { get; set; } = new();
         public Tx Tx { get; set; } = new();
 
-        [ObservableProperty]
-        private Regions currentRegion = Regions.Coils_0x;
-
         public MainWindowViewModel()
         {
             this.mr = new ModBusRTUMaster(log, Config);
+
+            Tx.OnFunctionCodeChanged += (f) =>
+            {
+                if (f >= FunctionCode.WriteCoils)
+                    DataList.Clear();
+            };
+
             StateMonitor();
         }
 
@@ -57,48 +61,32 @@ namespace Communication.Test
         }
 
         [RelayCommand]
-        public async Task ReadAsync()
+        public async Task ExecuteAsync()
         {
-            DataList.Clear();
-            var currentAdrs = Tx.Start;
+            if (!ProcessTxData(out byte[] txData))
+                return;
 
-            Tx.FunctionCode = CurrentRegion switch
-            {
-                Regions.Coils_0x => 0x01,
-                Regions.DiscreteInputs_1x => 0x02,
-                Regions.InputRegister_3x => 0x04,
-                Regions.HodingRegister_4x => 0x03,
-                _ => 0x01,
-            };
+            var currentAdrs = Tx.Start; // 记录当前地址
+            var currentFunc = Tx.FunctionCode;
 
             CancellationTokenSource tk = new();
-            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, null, tk.Token);
 
-            if (r.IsSuccess && r.Data != null)
+            Console.WriteLine((ushort)Tx.FunctionCode);
+
+            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, (ushort)Tx.FunctionCode, Tx.Start, Tx.Length, txData, tk.Token);
+
+            if (r.IsSuccess && r.Data != null && currentFunc < FunctionCode.WriteCoils)
             {
                 foreach (var b in r.Data)
                 {
-                    DataList.Add(new ModBusData() { Address = (ushort)currentAdrs, Value = b });
+                    DataList.Add(new ModBusData() { Address = currentAdrs, Value = b });
                     currentAdrs++;
                 }
             }
             else
             {
-                var hexStr = r.Data?.UShortsToHexString();
+                var hexStr = r.Data?.ToHexString();
                 MessageBox.Show(hexStr);
-            }
-        }
-
-        public async Task WriteAsync(){
-            CancellationTokenSource tk = new();
-            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, Tx.FunctionCode, Tx.Start, Tx.Length, Tx.Data, tk.Token);
-            if (r.IsSuccess)
-            {
-                MessageBox.Show("Write success!");
-            }
-            else
-            {
-                // MessageBox.Show($"Write failed! Exception code : {r.ExceptionCode}");
             }
         }
 
@@ -126,5 +114,28 @@ namespace Communication.Test
             });
         }
 
+        private bool ProcessTxData(out byte[] txData)
+        {
+            txData = DataList.Select(x => x.Value).ToArray().ToByteArrayBigEndian();
+            // txData = [];
+
+            // 功能区分，处理写入数据和读取数据
+            if (Tx.FunctionCode >= FunctionCode.WriteCoils)
+            {
+                if (txData == null || txData.Length <= 0)
+                {
+                    MessageBox.Show("The data can not be null!");
+                    return false;
+                }
+
+                if (Tx.FunctionCode == FunctionCode.WriteCoils || Tx.FunctionCode == FunctionCode.WriteMultiCoils)
+                    txData = txData.SetBitToFF();
+            }
+            // 非写入功能，清空数据列表
+            else
+                DataList.Clear();
+
+            return true;
+        }
     }
 }
