@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Communication.ModBus.Utils
 {
-    public static class LogFormatHelper
+    public static class LogExtentions
     {
         private static readonly Stopwatch sw = Stopwatch.StartNew();
         private static long lastTimestamp = 0;

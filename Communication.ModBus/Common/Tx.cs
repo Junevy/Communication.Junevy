@@ -9,7 +9,7 @@ namespace Communication.ModBus.Common
         /// <summary>
         /// 功能码改变事件。
         /// </summary>
-        public event Action<FunctionCode>? OnFunctionCodeChanged;
+        public event Action<ModBusFunctionCode>? OnFunctionCodeChanged;
 
         /// <summary>
         /// 从站ID。
@@ -19,8 +19,8 @@ namespace Communication.ModBus.Common
         /// <summary>
         /// 功能码。
         /// </summary>
-        private FunctionCode functionCode = FunctionCode.ReadCoils;
-        public FunctionCode FunctionCode 
+        private ModBusFunctionCode functionCode = ModBusFunctionCode.ReadCoils;
+        public ModBusFunctionCode FunctionCode 
         {
             get => functionCode;
             set {

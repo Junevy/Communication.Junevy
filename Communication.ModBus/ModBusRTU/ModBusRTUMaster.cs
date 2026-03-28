@@ -101,15 +101,15 @@ namespace Communication.ModBus.ModBusRTU
             if (length == 0)
                 return Rx<ushort[]>.Fail("Read length can not be 0!");
 
-            if ((functionCode >= (ushort)FunctionCode.WriteCoils) && writeData == null)
+            if ((functionCode >= (ushort)ModBusFunctionCode.WriteCoils) && writeData == null)
                 return Rx<ushort[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
 
             try
             {
-                byte[] request = ModBusHelper.BuildTxFrame(slaveID, (byte)functionCode, start, length, writeData);
+                byte[] request = ModBusTools.BuildTxFrame(slaveID, (byte)functionCode, start, length, writeData);
                 return await ExecuteAsync(request, slaveID, (byte)functionCode, response =>
                 {
-                    return ModBusResponseParser.ParseRx(response, slaveID, functionCode, length, writeData);
+                    return ModBusRxParser.ParseRx(response, slaveID, functionCode, length, writeData);
                 }, token);
             }
             catch (Exception ex)
@@ -214,7 +214,7 @@ namespace Communication.ModBus.ModBusRTU
                     buffer.AddRange(temp.AsSpan(0, count));
 
                     // 尝试解析 Modbus 帧
-                    if (ModBusRTUFrame.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
+                    if (ModBusRxParser.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
                     {
                         return Rx<byte[]>.Success(frame);
                     }

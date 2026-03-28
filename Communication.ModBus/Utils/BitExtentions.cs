@@ -3,14 +3,14 @@
     /// <summary>
     /// Ushort类型的工具类，提供将ushort转换为字节数组的方法，以及从字节数组转换回ushort的方法。
     /// </summary>
-    public static class UshortHelper
+    public static class BitExtentions
     {
         /// <summary>
         /// 获取ushort值的字节数组，低字节在前，高字节在后。
         /// </summary>
         /// <param name="value">需要转为byte[]类型的ushort值</param>
         /// <returns></returns>
-        public static byte[] ToBytesByLittleEndian(ushort value)
+        public static byte[] ToBytesByLittleEndian(this ushort value)
         {
             return
             [

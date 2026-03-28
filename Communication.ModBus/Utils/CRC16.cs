@@ -5,6 +5,17 @@
     /// </summary>
     public static class CRC16
     {
+        public static bool ValidateCRC(byte[] frame)
+        {
+            var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
+            var receivedCRC = frame.Skip(frame.Length - 2).ToArray();
+            var calculatedCRC = CRC16.CRCLittleEndian(dataWithoutCRC);
+            return receivedCRC.SequenceEqual(calculatedCRC);
+        }
+
+        public static void AddCRC16(List<byte> frame)
+            => frame.AddRange(CRC16.CRCLittleEndian(frame.ToArray()));
+
         /// <summary>
         /// 计算byte[]的CRC16校验码
         /// </summary>
@@ -42,7 +53,7 @@
         public static byte[] CRCLittleEndian(byte[] data)
         {
             ushort crc = Compute(data);
-            return UshortHelper.ToBytesByLittleEndian(crc); // 取低字节
+            return crc.ToBytesByLittleEndian(); // 取低字节
         }
 
         /// <summary>
@@ -53,7 +64,7 @@
         public static byte[] CRCBigEndian(byte[] data)
         {
             ushort crc = Compute(data);
-            return UshortHelper.ToBytesByBigEndian(crc); // 取高字节
+            return BitExtentions.ToBytesByBigEndian(crc); // 取高字节
         }
     }
 }

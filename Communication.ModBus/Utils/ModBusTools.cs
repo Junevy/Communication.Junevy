@@ -2,18 +2,18 @@
 
 namespace Communication.ModBus.Utils
 {
-    public static class ModBusHelper
+    public static class ModBusTools
     {
-        public static bool ValidateCRC(byte[] frame)
-        {
-            var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
-            var receivedCRC = frame.Skip(frame.Length - 2).ToArray();
-            var calculatedCRC = CRC16.CRCLittleEndian(dataWithoutCRC);
-            return receivedCRC.SequenceEqual(calculatedCRC);
-        }
+        //public static bool ValidateCRC(byte[] frame)
+        //{
+        //    var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
+        //    var receivedCRC = frame.Skip(frame.Length - 2).ToArray();
+        //    var calculatedCRC = CRC16.CRCLittleEndian(dataWithoutCRC);
+        //    return receivedCRC.SequenceEqual(calculatedCRC);
+        //}
 
-        public static void AddCRC16(List<byte> frame)
-            => frame.AddRange(CRC16.CRCLittleEndian(frame.ToArray()));
+        //public static void AddCRC16(List<byte> frame)
+        //    => frame.AddRange(CRC16.CRCLittleEndian(frame.ToArray()));
 
 
         /// <summary>
@@ -33,33 +33,33 @@ namespace Communication.ModBus.Utils
             if (data == null || data.Length <= 0)
             {
                 // 写操作，但没有数据提供
-                if (functionCode >= (byte)FunctionCode.WriteCoils)
+                if (functionCode >= (byte)ModBusFunctionCode.WriteCoils)
                 {
                     throw new ArgumentException("The data is empty.");
                 }
 
                 // 读操作不需要数据
-                if (functionCode < (byte)FunctionCode.WriteCoils)
+                if (functionCode < (byte)ModBusFunctionCode.WriteCoils)
                 {
                     frame =
                     [
                         slaveID,
                         functionCode,
-                        .. UshortHelper.ToBytesByBigEndian(start),
-                        .. UshortHelper.ToBytesByBigEndian(length),
+                        .. BitExtentions.ToBytesByBigEndian(start),
+                        .. BitExtentions.ToBytesByBigEndian(length),
                     ];
                 }
             }
             else
             {
                 // 写操作，有数据提供
-                if (functionCode >= (byte)FunctionCode.WriteCoils)
+                if (functionCode >= (byte)ModBusFunctionCode.WriteCoils)
                 {
                     frame =
                     [
                         slaveID,
                         functionCode,
-                        .. UshortHelper.ToBytesByBigEndian(start),
+                        .. BitExtentions.ToBytesByBigEndian(start),
                         .. data ?? [],
                     ];
                 }
@@ -86,7 +86,7 @@ namespace Communication.ModBus.Utils
             if (frame.Count == 0)
                 throw new ArgumentException("Check the function code or data.");
 
-            AddCRC16(frame);
+            CRC16.AddCRC16(frame);
             return [.. frame];
         }
     }

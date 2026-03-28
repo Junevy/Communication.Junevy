@@ -1,8 +1,7 @@
 ﻿namespace Communication.ModBus.Common
 {
-    public enum FunctionCode
+    public enum ModBusFunctionCode
     {
-
         ReadCoils = 0x01,
         ReadDiscreteInputs = 0x02,
         ReadInputRegister = 0x03,

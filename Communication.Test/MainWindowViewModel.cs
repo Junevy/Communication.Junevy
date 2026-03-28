@@ -26,7 +26,7 @@ namespace Communication.Test
 
         public Array ParityList => Enum.GetValues(typeof(Parity));
         public Array StopBitsList => Enum.GetValues(typeof(StopBits));
-        public Array RegionList => Enum.GetValues(typeof(FunctionCode));
+        public Array RegionList => Enum.GetValues(typeof(ModBusFunctionCode));
         public int[] Bits { get; private set; } = [5, 6, 7, 8];
         public int[] BaudRates { get; private set; } = [9600, 19200, 38400, 57600, 115200];
         #endregion
@@ -41,7 +41,7 @@ namespace Communication.Test
 
             Tx.OnFunctionCodeChanged += (f) =>
             {
-                if (f >= FunctionCode.WriteCoils)
+                if (f >= ModBusFunctionCode.WriteCoils)
                     DataList.Clear();
             };
 
@@ -67,15 +67,13 @@ namespace Communication.Test
                 return;
 
             var currentAdrs = Tx.Start; // 记录当前地址
-            var currentFunc = Tx.FunctionCode;
-
             CancellationTokenSource tk = new();
 
             Console.WriteLine((ushort)Tx.FunctionCode);
 
             var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, (ushort)Tx.FunctionCode, Tx.Start, Tx.Length, txData, tk.Token);
 
-            if (r.IsSuccess && r.Data != null && currentFunc < FunctionCode.WriteCoils)
+            if (r.IsSuccess && r.Data != null && r.Data[01] < (byte)ModBusFunctionCode.WriteCoils)
             {
                 foreach (var b in r.Data)
                 {
@@ -120,7 +118,7 @@ namespace Communication.Test
             // txData = [];
 
             // 功能区分，处理写入数据和读取数据
-            if (Tx.FunctionCode >= FunctionCode.WriteCoils)
+            if (Tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
             {
                 if (txData == null || txData.Length <= 0)
                 {
@@ -128,7 +126,7 @@ namespace Communication.Test
                     return false;
                 }
 
-                if (Tx.FunctionCode == FunctionCode.WriteCoils || Tx.FunctionCode == FunctionCode.WriteMultiCoils)
+                if (Tx.FunctionCode == ModBusFunctionCode.WriteCoils || Tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils)
                     txData = txData.SetBitToFF();
             }
             // 非写入功能，清空数据列表
