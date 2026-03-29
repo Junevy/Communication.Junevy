@@ -78,6 +78,9 @@ namespace Communication.ModBus.ModBusRTU
         /// <summary>
         /// 构建执行请求。
         /// </summary>
+        /// <param name="tx">ModBus 请求数据。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <returns>执行结果。</returns>
         public Rx<byte[]> Build_Execute_Tx(Tx tx, CancellationToken token = default)
         {
             return Build_Execute_TxAsync(tx, token).GetAwaiter().GetResult();
@@ -86,11 +89,7 @@ namespace Communication.ModBus.ModBusRTU
         /// <summary>
         /// 构建执行请求。
         /// </summary>
-        /// <param name="slaveID">从站ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <param name="start">起始地址。</param>
-        /// <param name="length">读取长度。</param>
-        /// <param name="writeData">需要写入的数据。</param>
+        /// <param name="tx">ModBus 请求数据。</param>
         /// <param name="token">取消令牌。</param>
         /// <returns>执行结果。</returns>
         public async Task<Rx<byte[]>> Build_Execute_TxAsync(Tx tx, CancellationToken token = default)

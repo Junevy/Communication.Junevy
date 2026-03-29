@@ -6,33 +6,11 @@ namespace Communication.ModBus.ModBusRTU
     public class ModBusRxParser
     {
         /// <summary>
-        /// 解析 ModBus 响应数据，将数据转换为 byte[] 类型。
+        /// 解析 ModBus 响应的数据
         /// </summary>
         /// <param name="response">ModBus 响应数据。</param>
-        /// <param name="slaveID">从站 ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <param name="length">读取内容的长度。</param>
-        /// <param name="writeData">需要写入的数据。</param>
-        /// <returns>读取到的byte[] 类型的值。</returns>
-        //public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
-        //{
-        //    //var r = CheckRx(response, tx);
-        //    //if (!r.IsSuccess)
-        //    //    return Rx<byte[]>.Fail(r.ErrorMessage ?? "Check Frame is failed.", r.Data ?? []);
-        //    //return Rx<byte[]>.Success(response);
-        //    //return (byte)tx.FunctionCode switch
-        //    //{
-        //    //    0x01 or 0x02 => Rx<byte[]>.Success(response),
-        //    //    0x03 or 0x04 => Rx<byte[]>.Success(ParseRegisters(response, tx.Length)),
-        //    //    0x05 or 0x06 => Rx<byte[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待验证，回显Rx
-        //    //    0x0F or 0x10 => Rx<byte[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待增加方法
-        //    //    _ => Rx<byte[]>.Fail("The function code not support."),
-        //    //};
-
-        //}
-
-
-
+        /// <param name="tx">ModBus 请求数据。</param>
+        /// <returns>解析后的响应数据</returns>
         public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
         {
             if (response == null || response.Length < 5)
@@ -56,7 +34,7 @@ namespace Communication.ModBus.ModBusRTU
         }
 
         /// <summary>
-        /// 验证 Read Rx，对应 Function Code 0x01, 0x02, 0x03, 0x04。
+        /// 验证 读取功能的 Rx，对应 Function Code 0x01, 0x02, 0x03, 0x04。
         /// </summary>
         /// <param name="response">响应数据。</param>
         /// <param name="functionCode">功能码。</param>
@@ -82,12 +60,10 @@ namespace Communication.ModBus.ModBusRTU
         }
 
         /// <summary>
-        /// 验证 Echo Rx，对应 Function Code 0x05, 0x06。
+        /// 验证 回显 Rx，对应 Function Code 0x05, 0x06。
         /// </summary>
-        /// <param name="response">请求数据。</param>
-        /// <param name="slaveID">从站 ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <param name="writeData">写入的数据</param>
+        /// <param name="response">响应数据。</param>
+        /// <param name="tx">ModBus 请求数据。</param>
         /// <returns>验证结果。</returns>
         public static Rx<byte[]> VerifyEchoRx(byte[] response, Tx tx)
         {
@@ -110,6 +86,12 @@ namespace Communication.ModBus.ModBusRTU
             return Rx<byte[]>.Success(response);
         }
 
+        /// <summary>
+        /// 验证 多写入 Rx，对应 Function Code 0x0F, 0x10。
+        /// </summary>
+        /// <param name="response">响应数据。</param>
+        /// <param name="tx">ModBus 请求数据。</param>
+        /// <returns>验证结果。</returns>
         public static Rx<byte[]> VerifyMultiWriteRx(byte[] response, Tx tx)
         {
             return Rx<byte[]>.Success(response);

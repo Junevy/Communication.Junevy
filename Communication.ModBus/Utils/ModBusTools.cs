@@ -8,11 +8,7 @@ namespace Communication.ModBus.Utils
         /// <summary>
         /// 构建ModBus发送帧。
         /// </summary>
-        /// <param name="slaveID">从站ID</param>
-        /// <param name="functionCode">功能码</param>
-        /// <param name="start">起始地址</param>
-        /// <param name="length">读取长度</param>
-        /// <param name="data">数据</param>
+        /// <param name="tx">ModBus发送请求</param>
         /// <returns>ModBus发送帧</returns>
         /// <exception cref="ArgumentException">当功能码为0x05、0x06、0x0F、0x10、0x17时，且没有提供数据时，抛出异常。</exception>
         public static byte[] BuildTxFrame(Tx tx)
@@ -26,6 +22,7 @@ namespace Communication.ModBus.Utils
                     throw new ArgumentException("The data is empty.");
                 }
 
+                // 构建写入帧（单个写入）
                 if (tx.FunctionCode == ModBusFunctionCode.WriteCoils || tx.FunctionCode == ModBusFunctionCode.WriteHodingRegister)
                     frame =
                     [
@@ -34,6 +31,8 @@ namespace Communication.ModBus.Utils
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. tx.Data,
                     ];
+                    
+                // 构建写入帧（多个写入）
                 else
                     frame =
                     [
@@ -41,11 +40,13 @@ namespace Communication.ModBus.Utils
                         (byte) tx.FunctionCode,
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. BitExtentions.ToBytesByBigEndian(tx.Length),
-                        (byte) ( (tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils
-                                    ? (tx.Length + 7) / 8 : (tx.Length * 2) )),
+                        (byte)  (tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils
+                                    ? (tx.Length + 7) / 8 : (tx.Length * 2) ),
                         .. tx.Data,
                     ];
             }
+            
+            // 构建读取帧
             else
             {
                 frame =
@@ -57,61 +58,6 @@ namespace Communication.ModBus.Utils
                 ];
             }
 
-
-            /*
-            //if (tx.Data == null || tx.Data.Length <= 0)
-            //{
-            //    // 写操作，但没有数据提供
-            //    if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
-            //    {
-            //        throw new ArgumentException("The data is empty.");
-            //    }
-
-            //    // 读操作不需要数据
-            //    if (tx.FunctionCode < ModBusFunctionCode.WriteCoils)
-            //    {
-            //        frame =
-            //        [
-            //            (byte) tx.SlaveId,
-            //            (byte) tx.FunctionCode,
-            //            .. BitExtentions.ToBytesByBigEndian(tx.Start),
-            //            .. BitExtentions.ToBytesByBigEndian(tx.Length),
-            //        ];
-            //    }
-            //}
-            //else
-            //{
-            //    // 写操作，有数据提供
-            //    if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
-            //    {
-            //        frame =
-            //        [
-            //            (byte) tx.SlaveId,
-            //            (byte) tx.FunctionCode,
-            //            .. BitExtentions.ToBytesByBigEndian(tx.Start),
-            //            .. tx.Data ?? [],
-            //        ];
-            //    }
-
-            //    /* 读操作，有数据，但功能码为0x01、0x02、0x03、0x04时，忽略数据。（废弃）
-            //    // 防止误读取，导致数据错误。
-            //    // 例如：提供数据情况下，但功能码写错（0x05 => 0x01）：
-            //    // 01 01 01 00 01 01 CRC  
-            //    // 正常需求（读从站1，地址0x01，读取1个线圈）：
-            //    // 01 01 00 00 00 01 CRC  
-            //    // 所以稳妥考虑，注释该选项
-            //    // if (functionCode == 0x01 || functionCode == 0x02 || functionCode == 0x03 || functionCode == 0x04)
-            //    // {
-            //    //     frame =
-            //    //     [
-            //    //         slaveID,
-            //    //         functionCode,
-            //    //         .. UshortHelper.ToBytesByBigEndian(start),
-            //    //         .. UshortHelper.ToBytesByBigEndian(length),
-            //    //     ];
-            //    }*/
-            //} */
-
             if (frame.Count == 0)
                 throw new ArgumentException("Check the function code or data.");
 
@@ -119,6 +65,12 @@ namespace Communication.ModBus.Utils
             return [.. frame];
         }
 
+        /// <summary>
+        /// 解析ModBus接收帧中的线圈数据。
+        /// </summary>
+        /// <param name="rx">ModBus接收帧</param>
+        /// <param name="length">线圈数量</param>
+        /// <returns>线圈数据</returns>
         public static ushort[] ParseCoils(byte[] rx, ushort length)
         {
             ushort[] result = new ushort[length];
@@ -133,6 +85,12 @@ namespace Communication.ModBus.Utils
             return result;
         }
 
+        /// <summary>
+        /// 解析ModBus接收帧中的寄存器数据。
+        /// </summary>
+        /// <param name="rx">ModBus接收帧</param>
+        /// <param name="length">寄存器数量</param>
+        /// <returns>寄存器数据</returns>
         public static ushort[] ParseRegisters(byte[] rx, ushort length)
         {
             ushort[] result = new ushort[length];

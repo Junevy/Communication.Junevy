@@ -5,6 +5,11 @@
     /// </summary>
     public static class CRC16
     {
+        /// <summary>
+        /// 验证byte[] 值的CRC16校验码是否正确
+        /// </summary>
+        /// <param name="frame">需要被验证CRC16校验码的byte[]类型的值</param>
+        /// <returns>bool类型的校验结果</returns>
         public static bool ValidateCRC(byte[] frame)
         {
             var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
@@ -13,11 +18,15 @@
             return receivedCRC.SequenceEqual(calculatedCRC);
         }
 
+        /// <summary>
+        /// 向byte[] 值的末尾添加CRC16校验码
+        /// </summary>
+        /// <param name="frame">需要被添加CRC16校验码的byte[]类型的值</param>
         public static void AddCRC16(List<byte> frame)
             => frame.AddRange(CRCLittleEndian(frame.ToArray()));
 
         /// <summary>
-        /// 计算byte[]的CRC16校验码
+        /// 计算byte[] 值的CRC16校验码
         /// </summary>
         /// <param name="data">需要被计算CRC16的byte[]类型的值</param>
         /// <returns>ushort类型的CRC16校验码</returns>
@@ -46,10 +55,10 @@
         }
 
         /// <summary>
-        /// 计算byte[]类型值的CRC16校验码，并按照小端序返回
+        /// 计算byte[] 值的CRC16校验码，并按照小端序返回
         /// </summary>
         /// <param name="data">需要被计算CRC16的byte[]类型的值</param>
-        /// <returns></returns>
+        /// <returns>byte[]类型的CRC16校验码，按照小端序返回</returns>
         public static byte[] CRCLittleEndian(byte[] data)
         {
             ushort crc = Compute(data);
@@ -57,10 +66,10 @@
         }
 
         /// <summary>
-        /// 计算byte[]类型值的CRC16校验码，并按照大端序返回
+        /// 计算byte[] 值的CRC16校验码，并按照大端序返回
         /// </summary>
         /// <param name="data">需要被计算CRC16的byte[]类型的值</param>
-        /// <returns></returns>
+        /// <returns>byte[]类型的CRC16校验码，按照大端序返回</returns>
         public static byte[] CRCBigEndian(byte[] data)
         {
             ushort crc = Compute(data);

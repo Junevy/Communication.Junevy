@@ -1,4 +1,6 @@
-﻿namespace Communication.ModBus.Utils
+﻿using System.Xml;
+
+namespace Communication.ModBus.Utils
 {
     /// <summary>
     /// Ushort类型的工具类，提供将ushort转换为字节数组的方法，以及从字节数组转换回ushort的方法。
@@ -107,15 +109,18 @@
                 return BitConverter.ToString([.. buffer]);
             }
 
-            // string format = withSpace ? "X2 " : "X2";
             return BitConverter.ToString(bytes);
 
             // 或者用 LINQ：
             // return string.Join(withSpace ? " " : "", bytes.Select(b => b.ToString("X2")));
         }
 
-
-        public static byte[] ToCoils(this ushort[] values)
+        /// <summary>
+        /// 将ushort值数组转换为byte[]类型的数组，数组中的每个byte表示8个线圈的状态。
+        /// </summary>
+        /// <param name="values">需要解析线圈状态的ushort值数组</param>
+        /// <returns>解析后的线圈状态数组</returns>
+        public static byte[] ToMultiCoils(this ushort[] values)
         {
             if (values == null || values.Length == 0)
                 return Array.Empty<byte>();
@@ -133,32 +138,22 @@
                     result[byteIndex] |= (byte)(1 << bitIndex);
                 }
             }
-
             return result;
         }
 
-
-        /// <summary>
-        /// 交换字节数组中每两个字节的位置
-        /// </summary>
-        /// <param name="bytes">需要交换的字节数组</param>
-        /// <returns>交换后的字节数组</returns>
-        public static byte[] SwapBytesInPairs(this byte[] bytes)
+        public static byte[] ToCoil(this ushort[] values)
         {
-            for (int i = 0; i < bytes.Length - 1; i += 2)
-            {
-                // 交换每两个字节
-                (bytes[i], bytes[i + 1]) = (bytes[i + 1], bytes[i]);
-            }
-            return bytes;
+            byte[] txData = values.ToByteArrayBigEndian();
+            return txData.ToCoils();
         }
 
+
         /// <summary>
-        /// 将所有从ushort[]转为byte[]的数组，高低字节任意不为0，则置为0xFF00，写入线圈时适用
+        /// 转换byte[] ：相邻的两个字节任意一个不为0x00，则将两个字节置为0xFF 00，写入线圈时适用
         /// </summary>
-        /// <param name="txData">需要处理的Modbus Write Data</param>
-        /// <returns>处理后的Modbus Write Data</returns>
-        public static byte[] SetBitToFF(this byte[] txData)
+        /// <param name="txData">需要处理的线圈状态数组</param>
+        /// <returns>处理后的线圈状态数组</returns>
+        public static byte[] ToCoils(this byte[] txData)
         {
             if (txData == null || txData.Length % 2 != 0)
                 throw new ArgumentException("请检查输入的Write Data");

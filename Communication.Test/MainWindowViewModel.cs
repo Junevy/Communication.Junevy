@@ -35,13 +35,13 @@ namespace Communication.Test
         #endregion
 
         public ModBusRTUConfig Config { get; set; } = new();
-        public MbCmd Cmd { get; set; } = new();
         public Tx Tx { get; set; } = new();
 
         public MainWindowViewModel()
         {
             this.mr = new ModBusRTUMaster(log, Config);
 
+            // 监听功能码变化, 对应DataGrid的变化
             Tx.OnFunctionCodeChanged += (f) =>
             {
                 if (f >= ModBusFunctionCode.WriteCoils)
@@ -140,6 +140,7 @@ namespace Communication.Test
         {
             var temp = DataList.Select(x => x.Value).ToArray();
             txData = temp.ToByteArrayBigEndian();
+            
 
             // 功能区分，处理写入数据和读取数据
             if (Tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
@@ -151,13 +152,15 @@ namespace Communication.Test
                 }
 
                 if (Tx.FunctionCode == ModBusFunctionCode.WriteCoils)
-                    txData = temp.ToByteArrayBigEndian().SetBitToFF();
+                    txData = txData.ToCoils();
                 if (Tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils)
-                    txData = temp.ToCoils();
+                    txData = temp.ToMultiCoils();
             }
             // 非写入功能，清空数据列表
             else
+            {
                 DataList.Clear();
+            }
 
             return true;
         }
