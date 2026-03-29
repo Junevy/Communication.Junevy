@@ -15,7 +15,7 @@
         <local:BoolToColorConverter x:Key="BoolToColor" />
         <local:ReverseBoolConverter x:Key="ReverseBool" />
         <local:EnumToBoolConverter x:Key="EnumToBool" />
-        <!-- <local:LengthEnableConverter x:Key="LengthEnable" /> -->
+        <local:LengthEnableConverter x:Key="LengthEnable" />
     </Window.Resources>
 
     <Grid>
@@ -105,7 +105,7 @@
                             Width="120"
                             Height="20"
                             FontSize="12"
-                            Text="{Binding Tx.Length}" />
+                            Text="{Binding Length, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
                         <TextBlock Margin="0,10,0,0" Text="Region" />
                         <ComboBox
@@ -166,6 +166,8 @@
             Grid.Column="1"
             Width="300"
             AutoGenerateColumns="False"
+            CanUserAddRows="False"
+            CanUserResizeColumns="False"
             EnableRowVirtualization="True"
             HeadersVisibility="Column"
             HorizontalScrollBarVisibility="Hidden"
@@ -176,12 +178,16 @@
                 <DataGridTextColumn
                     Width="100"
                     Binding="{Binding Address}"
-                    Header="0x" />
+                    Header="0x"
+                    IsReadOnly="True" />
                 <DataGridTextColumn
                     Width="200"
                     Binding="{Binding Value}"
-                    Header="Value" />
+                    Header="Value"
+                    IsReadOnly="{Binding Tx.FunctionCode, Converter={StaticResource EnumToBool}}" />
             </DataGrid.Columns>
+
+            <!--  <DataGrid.  -->
         </DataGrid>
     </Grid>
 

@@ -6,60 +6,34 @@ namespace Communication.ModBus.ModBusRTU
     public class ModBusRxParser
     {
         /// <summary>
-        /// 解析 ModBus 响应数据，将数据转换为 ushort[] 类型。
+        /// 解析 ModBus 响应数据，将数据转换为 byte[] 类型。
         /// </summary>
         /// <param name="response">ModBus 响应数据。</param>
         /// <param name="slaveID">从站 ID。</param>
         /// <param name="functionCode">功能码。</param>
         /// <param name="length">读取内容的长度。</param>
         /// <param name="writeData">需要写入的数据。</param>
-        /// <returns>读取到的ushort[] 类型的值。</returns>
-        public static Rx<ushort[]> ParseRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? writeData = null)
-        {
-            var r = CheckRx(response, slaveID, functionCode, length, writeData);
-            if (!r.IsSuccess)
-                return Rx<ushort[]>.Fail(r.ErrorMessage ?? "Check Frame is failed.", r.Data?.Select(b => (ushort)b).ToArray());
+        /// <returns>读取到的byte[] 类型的值。</returns>
+        //public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
+        //{
+        //    //var r = CheckRx(response, tx);
+        //    //if (!r.IsSuccess)
+        //    //    return Rx<byte[]>.Fail(r.ErrorMessage ?? "Check Frame is failed.", r.Data ?? []);
+        //    //return Rx<byte[]>.Success(response);
+        //    //return (byte)tx.FunctionCode switch
+        //    //{
+        //    //    0x01 or 0x02 => Rx<byte[]>.Success(response),
+        //    //    0x03 or 0x04 => Rx<byte[]>.Success(ParseRegisters(response, tx.Length)),
+        //    //    0x05 or 0x06 => Rx<byte[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待验证，回显Rx
+        //    //    0x0F or 0x10 => Rx<byte[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待增加方法
+        //    //    _ => Rx<byte[]>.Fail("The function code not support."),
+        //    //};
 
-            return functionCode switch
-            {
-                0x01 or 0x02 => Rx<ushort[]>.Success(ParseCoils(response, length)),
-                0x03 or 0x04 => Rx<ushort[]>.Success(ParseRegisters(response, length)),
-                0x05 or 0x06 => Rx<ushort[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待验证，回显Rx
-                0x0F or 0x10 => Rx<ushort[]>.Success(response.Select(b => (ushort)b).ToArray()), // 待增加方法
-                _ => Rx<ushort[]>.Fail("The function code not support."),
-            };
-        }
+        //}
 
-        public static ushort[] ParseCoils(byte[] response, ushort length)
-        {
-            ushort[] result = new ushort[length];
 
-            for (int i = 0; i < length; i++)
-            {
-                int byteIndex = i / 8;     // 第几个字节
-                int bitIndex = i % 8;      // 第几位（低位在前）
-                                           // 获取 0 或 1
-                result[i] = (ushort)((response[3 + byteIndex] >> bitIndex) & 0x01);
-            }
 
-            return result;
-        }
-
-        public static ushort[] ParseRegisters(byte[] response, ushort length)
-        {
-            ushort[] result = new ushort[length];
-
-            for (int i = 0; i < length; i++)
-            {
-                int index = 3 + i * 2;
-
-                result[i] = (ushort)((response[index] << 8) | response[index + 1]);
-            }
-
-            return result;
-        }
-
-        public static Rx<byte[]> CheckRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? writeData = null)
+        public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
         {
             if (response == null || response.Length < 5)
                 return Rx<byte[]>.Fail("Frame can not be null or frame length < 5", response);
@@ -67,16 +41,16 @@ namespace Communication.ModBus.ModBusRTU
             if ((response[1] & 0x80) != 0)
                 return Rx<byte[]>.Fail($"The exception code : {response[2]}", response);
 
-            if (response[0] != slaveID || response[1] != functionCode)
+            if (response[0] != tx.SlaveId || response[1] != (byte)tx.FunctionCode)
                 return Rx<byte[]>.Fail($"The responsed slave id or function code error : {response[0]}, {response[1]}. " +
-                    $"The actual slave id or function code : {slaveID}, {functionCode}", response);
+                    $"The actual slave id or function code : {tx.SlaveId}, {tx.FunctionCode}", response);
 
 
-            return functionCode switch
+            return (byte)tx.FunctionCode switch
             {
-                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(response, functionCode, length),
-                0x05 or 0x06 => VerifyEchoRx(response, slaveID, functionCode, writeData),
-                0x0F or 0x10 => VerifyMultiWriteRx(response, slaveID, functionCode, length, writeData),
+                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(response, (ushort)tx.FunctionCode, tx.Length),
+                0x05 or 0x06 => VerifyEchoRx(response, tx),
+                0x0F or 0x10 => VerifyMultiWriteRx(response, tx),
                 _ => Rx<byte[]>.Fail("The function code not support.", response),
             };
         }
@@ -88,7 +62,7 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="functionCode">功能码。</param>
         /// <param name="length">读取的长度。</param>
         /// <returns>验证结果。</returns>
-        public static Rx<byte[]> VerifyReadRx(byte[] response, int functionCode, ushort length)
+        public static Rx<byte[]> VerifyReadRx(byte[] response, ushort functionCode, ushort length)
         {
             var byteCount = response[2];
             int expectedByteCount;
@@ -115,28 +89,28 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="functionCode">功能码。</param>
         /// <param name="writeData">写入的数据</param>
         /// <returns>验证结果。</returns>
-        public static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveID, int functionCode, byte[]? writeData = null)
+        public static Rx<byte[]> VerifyEchoRx(byte[] response, Tx tx)
         {
-            if (writeData == null)
+            if (tx.Data == null)
                 return Rx<byte[]>.Fail("The data is null.");
 
-            if (response.Length < writeData.Length + 6)
-                return Rx<byte[]>.Fail($"The request length is not equal to the data length. Actual {response.Length}, expected {writeData.Length + 6}.", response);
+            if (response.Length < tx.Data.Length + 6)
+                return Rx<byte[]>.Fail($"The request length is not equal to the data length. Actual {response.Length}, expected {tx.Data.Length + 6}.", response);
 
-            if (response[0] != slaveID || response[1] != functionCode)
+            if (response[0] != tx.SlaveId || response[1] != (ushort)tx.FunctionCode)
                 return Rx<byte[]>.Fail($"The slave id or function code error : {response[0]}, {response[1]}. " +
-                    $"The actual slave id or function code : {slaveID}, {functionCode}", response);
+                    $"The actual slave id or function code : {tx.SlaveId}, {tx.FunctionCode}", response);
 
-            for (int i = 4; i < writeData.Length; i++)
+            for (int i = 4; i < tx.Data.Length; i++)
             {
-                if (response[i] != writeData[i - 4])
-                    return Rx<byte[]>.Fail($"The data compared error. Actual {response}, expected {writeData}.", response);
+                if (response[i] != tx.Data[i - 4])
+                    return Rx<byte[]>.Fail($"The data compared error. Actual {response}, expected {tx.Data}.", response);
             }
 
             return Rx<byte[]>.Success(response);
         }
 
-        public static Rx<byte[]> VerifyMultiWriteRx(byte[] response, byte slaveID, int functionCode, ushort length, byte[]? data = null)
+        public static Rx<byte[]> VerifyMultiWriteRx(byte[] response, Tx tx)
         {
             return Rx<byte[]>.Success(response);
         }
@@ -149,7 +123,7 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="functionCode">功能码。</param>
         /// <param name="frame">提取到的报文。</param>
         /// <returns>是否成功提取。</returns>
-        public static bool TryExtractResponseFrame(List<byte> buffer, byte slaveID, byte functionCode, out byte[] frame)
+        public static bool TryExtractRxFrame(List<byte> buffer, byte slaveID, byte functionCode, out byte[] frame)
         {
             frame = [];
 

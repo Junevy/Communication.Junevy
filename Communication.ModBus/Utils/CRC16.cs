@@ -9,12 +9,12 @@
         {
             var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
             var receivedCRC = frame.Skip(frame.Length - 2).ToArray();
-            var calculatedCRC = CRC16.CRCLittleEndian(dataWithoutCRC);
+            var calculatedCRC = CRCLittleEndian(dataWithoutCRC);
             return receivedCRC.SequenceEqual(calculatedCRC);
         }
 
         public static void AddCRC16(List<byte> frame)
-            => frame.AddRange(CRC16.CRCLittleEndian(frame.ToArray()));
+            => frame.AddRange(CRCLittleEndian(frame.ToArray()));
 
         /// <summary>
         /// 计算byte[]的CRC16校验码

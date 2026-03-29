@@ -78,9 +78,9 @@ namespace Communication.ModBus.ModBusRTU
         /// <summary>
         /// 构建执行请求。
         /// </summary>
-        public Rx<ushort[]> Build_Execute_Tx(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? data = null, CancellationToken token = default)
+        public Rx<byte[]> Build_Execute_Tx(Tx tx, CancellationToken token = default)
         {
-            return Build_Execute_TxAsync(slaveID, functionCode, start, length, data, token).GetAwaiter().GetResult();
+            return Build_Execute_TxAsync(tx, token).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -93,28 +93,28 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="writeData">需要写入的数据。</param>
         /// <param name="token">取消令牌。</param>
         /// <returns>执行结果。</returns>
-        public async Task<Rx<ushort[]>> Build_Execute_TxAsync(byte slaveID, ushort functionCode, ushort start, ushort length, byte[]? writeData = null, CancellationToken token = default)
+        public async Task<Rx<byte[]>> Build_Execute_TxAsync(Tx tx, CancellationToken token = default)
         {
             if (!IsConnected)
-                return Rx<ushort[]>.Fail("Port not open.");
+                return Rx<byte[]>.Fail("Port not open.");
 
-            if (length == 0)
-                return Rx<ushort[]>.Fail("Read length can not be 0!");
+            if (tx.Length == 0)
+                return Rx<byte[]>.Fail("Read length can not be 0!");
 
-            if ((functionCode >= (ushort)ModBusFunctionCode.WriteCoils) && writeData == null)
-                return Rx<ushort[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
+            if ( (tx.FunctionCode>= ModBusFunctionCode.WriteCoils) && tx.Data== null)
+                return Rx<byte[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
 
             try
             {
-                byte[] request = ModBusTools.BuildTxFrame(slaveID, (byte)functionCode, start, length, writeData);
-                return await ExecuteAsync(request, slaveID, (byte)functionCode, response =>
+                byte[] request = ModBusTools.BuildTxFrame(tx);
+                return await ExecuteAsync(request, (byte)tx.SlaveId, (byte)tx.FunctionCode, response =>
                 {
-                    return ModBusRxParser.ParseRx(response, slaveID, functionCode, length, writeData);
+                    return ModBusRxParser.ParseRx(response, tx);
                 }, token);
             }
             catch (Exception ex)
             {
-                return Rx<ushort[]>.Fail(ex.Message);
+                return Rx<byte[]>.Fail(ex.Message);
             }
         }
 
@@ -214,7 +214,7 @@ namespace Communication.ModBus.ModBusRTU
                     buffer.AddRange(temp.AsSpan(0, count));
 
                     // 尝试解析 Modbus 帧
-                    if (ModBusRxParser.TryExtractResponseFrame(buffer, slaveID, funcCode, out var frame))
+                    if (ModBusRxParser.TryExtractRxFrame(buffer, slaveID, funcCode, out var frame))
                     {
                         return Rx<byte[]>.Success(frame);
                     }

@@ -42,7 +42,7 @@ namespace Communication.ModBus.Common
         /// <summary>
         /// 数据。
         /// </summary>
-        public byte[]? Data { get; set; }
+        public byte[]? Data { get; set; } = null;
 
 
         /// <summary>

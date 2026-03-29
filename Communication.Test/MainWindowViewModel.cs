@@ -20,6 +20,9 @@ namespace Communication.Test
             set => SetProperty(ref isConnected, value);
         }
 
+        [ObservableProperty]
+        private ushort length = 1;
+
         #region observable collection
         public ObservableCollection<ModBusData> DataList { get; set; } = [];
         public ObservableCollection<string> Serials { get; private set; } = new(SerialPort.GetPortNames());
@@ -42,7 +45,27 @@ namespace Communication.Test
             Tx.OnFunctionCodeChanged += (f) =>
             {
                 if (f >= ModBusFunctionCode.WriteCoils)
-                    DataList.Clear();
+                {
+                    if (DataList.Count < Length)
+                    {
+                        var l = DataList.Count;
+                        for (int i = 0; i < Length - l; i++)
+                        {
+                            DataList.Add(new ModBusData());
+                        }
+                    }
+
+                    if (DataList.Count > Length)
+                    {
+                        var l = DataList.Count;
+
+                        for (int i = 0; i < l - Length; i++)
+                        {
+                            DataList.RemoveAt(DataList.Count - 1);
+                        }
+                    }
+
+                }
             };
 
             StateMonitor();
@@ -67,13 +90,14 @@ namespace Communication.Test
                 return;
 
             var currentAdrs = Tx.Start; // 记录当前地址
+            Tx.Data = txData;
             CancellationTokenSource tk = new();
 
             Console.WriteLine((ushort)Tx.FunctionCode);
 
-            var r = await mr.Build_Execute_TxAsync((byte)Tx.SlaveId, (ushort)Tx.FunctionCode, Tx.Start, Tx.Length, txData, tk.Token);
+            var r = await mr.Build_Execute_TxAsync(Tx, tk.Token);
 
-            if (r.IsSuccess && r.Data != null && r.Data[01] < (byte)ModBusFunctionCode.WriteCoils)
+            if (r.IsSuccess && r.Data != null && r.Data[1] < (byte)ModBusFunctionCode.WriteCoils)
             {
                 foreach (var b in r.Data)
                 {
@@ -83,8 +107,8 @@ namespace Communication.Test
             }
             else
             {
-                var hexStr = r.Data?.ToHexString();
-                MessageBox.Show(hexStr);
+                //var hexStr = r.Data?.ToHexString();
+                //MessageBox.Show(hexStr);
             }
         }
 
@@ -114,8 +138,8 @@ namespace Communication.Test
 
         private bool ProcessTxData(out byte[] txData)
         {
-            txData = DataList.Select(x => x.Value).ToArray().ToByteArrayBigEndian();
-            // txData = [];
+            var temp = DataList.Select(x => x.Value).ToArray();
+            txData = temp.ToByteArrayBigEndian();
 
             // 功能区分，处理写入数据和读取数据
             if (Tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
@@ -126,8 +150,10 @@ namespace Communication.Test
                     return false;
                 }
 
-                if (Tx.FunctionCode == ModBusFunctionCode.WriteCoils || Tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils)
-                    txData = txData.SetBitToFF();
+                if (Tx.FunctionCode == ModBusFunctionCode.WriteCoils)
+                    txData = temp.ToByteArrayBigEndian().SetBitToFF();
+                if (Tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils)
+                    txData = temp.ToCoils();
             }
             // 非写入功能，清空数据列表
             else
@@ -135,5 +161,21 @@ namespace Communication.Test
 
             return true;
         }
+
+        partial void OnLengthChanged(ushort oldValue, ushort newValue)
+        {
+            DataList.Clear();
+
+            if (newValue > 128)
+                newValue = 127;
+
+            for(ushort i = 0; i < newValue; i++)
+            {
+                DataList.Add(new ModBusData() { Address = i});
+            }
+
+            Tx.Length = newValue;
+        }
+
     }
 }

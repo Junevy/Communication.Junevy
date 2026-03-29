@@ -19,6 +19,31 @@
             ];
         }
 
+        /// <summary>
+        /// 获取ushort值的字节数组，高字节在前，低字节在后。
+        /// </summary>
+        /// <param name="value">需要转为byte[]类型的ushort值</param>
+        /// <returns></returns>
+        public static byte[] ToBytesByBigEndian(ushort value)
+        {
+            return
+            [
+                (byte)((value >> 8) & 0xFF), // 高字节
+                (byte)(value & 0xFF)         // 低字节
+            ];
+        }
+
+        /// <summary>
+        /// 将两个字节转为ushort值，高字节在前，低字节在后。
+        /// </summary>
+        /// <param name="lowByte">低字节</param>
+        /// <param name="highByte">高字节</param>
+        /// <returns>转后的ushort值</returns>
+        public static ushort ToUshort(byte lowByte, byte highByte)
+        {
+            return (ushort)((highByte << 8) | lowByte);
+        }
+
 
         /// <summary>
         /// 获取ushort值的字节数组，高字节在前，低字节在后。
@@ -54,7 +79,7 @@
         /// <returns>转后的十六进制字符串</returns>
         public static string ToHexString(this ushort[] ushorts, bool reject0X00 = false)
         {
-            return BytesToHexString(ushorts.ToByteArrayBigEndian(), reject0X00);
+            return ToHexString(ushorts.ToByteArrayBigEndian(), reject0X00);
         }
 
         /// <summary>
@@ -63,7 +88,7 @@
         /// <param name="bytes">需要转为十六进制字符串的字节数组</param>
         /// <param name="reject0X00">是否拒绝0x00在高字节位</param>
         /// <returns>转后的十六进制字符串</returns>
-        public static string BytesToHexString(this byte[] bytes, bool reject0X00 = false)
+        public static string ToHexString(this byte[] bytes, bool reject0X00 = false)
         {
             if (bytes == null || bytes.Length == 0)
                 return string.Empty;
@@ -90,30 +115,28 @@
         }
 
 
-        /// <summary>
-        /// 获取ushort值的字节数组，高字节在前，低字节在后。
-        /// </summary>
-        /// <param name="value">需要转为byte[]类型的ushort值</param>
-        /// <returns></returns>
-        public static byte[] ToBytesByBigEndian(ushort value)
+        public static byte[] ToCoils(this ushort[] values)
         {
-            return
-            [
-                (byte)((value >> 8) & 0xFF), // 高字节
-                (byte)(value & 0xFF)         // 低字节
-            ];
+            if (values == null || values.Length == 0)
+                return Array.Empty<byte>();
+
+            int byteCount = (values.Length + 7) / 8;
+            byte[] result = new byte[byteCount];
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i] != 0) // 非0即ON
+                {
+                    int byteIndex = i / 8;
+                    int bitIndex = i % 8;
+
+                    result[byteIndex] |= (byte)(1 << bitIndex);
+                }
+            }
+
+            return result;
         }
 
-        /// <summary>
-        /// 将两个字节转为ushort值，高字节在前，低字节在后。
-        /// </summary>
-        /// <param name="lowByte">低字节</param>
-        /// <param name="highByte">高字节</param>
-        /// <returns>转后的ushort值</returns>
-        public static ushort ToUInt16(byte lowByte, byte highByte)
-        {
-            return (ushort)((highByte << 8) | lowByte);
-        }
 
         /// <summary>
         /// 交换字节数组中每两个字节的位置
@@ -154,5 +177,7 @@
             }
             return txData;
         }
+
+
     }
 }

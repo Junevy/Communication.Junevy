@@ -2,7 +2,7 @@
 {
     public class ModBusData
     {
-        public ushort Address{ get; set; }
-        public ushort Value { get; set; }
+        public ushort Address { get; set; } = ushort.MinValue;
+        public ushort Value { get; set; } = ushort.MinValue;
     }
 }
