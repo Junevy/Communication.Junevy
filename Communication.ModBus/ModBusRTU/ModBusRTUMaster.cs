@@ -4,10 +4,10 @@ using System.IO.Ports;
 
 namespace Communication.ModBus.ModBusRTU
 {
-    public sealed class ModBusRTUMaster(ISerilog logger, ModBusRTUConfig config) : IModBus
+    public sealed class ModBusRTUMaster(ModBusRTUConfig config) : IModBus
     {
         private bool disposed;
-        private readonly ISerilog logger = logger;
+        private readonly ISerilog? logger = Serilogger.Instance;
 
         public bool IsConnected => serialPort.IsOpen;
         private readonly SerialPort serialPort = new();
@@ -59,7 +59,8 @@ namespace Communication.ModBus.ModBusRTU
             }
             catch (Exception ex)
             {
-
+                logger?.Error("Configure port failed: {@Config}, {Exception}", Config, ex.Message);
+                throw;
             }
 
         }
@@ -72,7 +73,11 @@ namespace Communication.ModBus.ModBusRTU
                     serialPort.Close();
                 this.serialPort.Dispose();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                logger?.Error("Disconnect port failed: {@Config}, {Exception}", Config, ex.Message);
+                throw;
+            }
         }
 
         /// <summary>
@@ -94,14 +99,25 @@ namespace Communication.ModBus.ModBusRTU
         /// <returns>执行结果。</returns>
         public async Task<Rx<byte[]>> Build_Execute_TxAsync(Tx tx, CancellationToken token = default)
         {
+            logger?.Information("Build Execute Tx: {@Tx}", tx);
+
             if (!IsConnected)
-                return Rx<byte[]>.Fail("Port not open.");
+            {
+                logger?.Warning("Port not open: {Config.PortName}.", Config.PortName);
+                return Rx<byte[]>.Fail("Port not open");
+            }
 
             if (tx.Length == 0)
+            {
+                logger?.Warning("Read length can not be 0!");
                 return Rx<byte[]>.Fail("Read length can not be 0!");
+            }
 
             if ( (tx.FunctionCode>= ModBusFunctionCode.WriteCoils) && tx.Data== null)
+            {
+                logger?.Warning("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10, function code: {Tx.FunctionCode}.", tx.FunctionCode);
                 return Rx<byte[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
+            }
 
             try
             {
@@ -113,6 +129,7 @@ namespace Communication.ModBus.ModBusRTU
             }
             catch (Exception ex)
             {
+                logger?.Error( "Execute request error!", ex);
                 return Rx<byte[]>.Fail(ex.Message);
             }
         }
@@ -130,7 +147,7 @@ namespace Communication.ModBus.ModBusRTU
             Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
-            string lastError = string.Empty;
+            // string lastError = string.Empty;
 
             try
             {
@@ -152,21 +169,23 @@ namespace Communication.ModBus.ModBusRTU
 
                         if (!receiveResult.IsSuccess)
                         {
-                            lastError = "Try parse frame error!";
+                            logger?.Warning("Try parse frame error: {@Rx.Data}", receiveResult.Data);
                             continue;
                         }
+                        logger?.Information("Try parse frame success: {@Rx.Data}", receiveResult.Data);
                         return parser(receiveResult.Data!);
                     }
                     catch (TimeoutException)
                     {
-                        //logger.Tx("Write timeout");
+                        logger?.Error("Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
                         throw;
                     }
                     catch (Exception ex)
                     {
-                        lastError = ex.Message;
+                        logger?.Error("Execute request error!", ex);
                     }
                 }
+                logger?.Warning("Failed after retries.");
                 return Rx<T>.Fail("Failed after retries.");
             }
             finally
@@ -203,6 +222,7 @@ namespace Communication.ModBus.ModBusRTU
                     }
                     catch (TimeoutException)
                     {
+                        logger?.Error("Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
                         // 当 2000ms 没有读到任何数据时，原生 Read 方法会抛出 TimeoutException
                         // 对于 Modbus RTU 来说，帧超时通常意味着读取失败或从站没响应
                         return Rx<byte[]>.Fail("读取从站超时 (2000ms)");
@@ -215,15 +235,18 @@ namespace Communication.ModBus.ModBusRTU
                     // 尝试解析 Modbus 帧
                     if (ModBusRxParser.TryExtractRxFrame(buffer, slaveID, funcCode, out var frame))
                     {
+                        logger?.Information("Try parse frame success: {@Rx.Data}", frame);
                         return Rx<byte[]>.Success(frame);
                     }
 
                     // 如果还没凑够一帧，稍微等待一下给Slave一点缓冲时间
+                    logger?.Debug("Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
                     await Task.Delay(Config.IntervalTime, token);
                 }
             }
             catch (OperationCanceledException oex)
             {
+                logger?.Error("Receive response error: {oex.Message}", oex.Message);
                 // 捕获到全局 token 被取消（比如用户主动停止通讯）
                 if (token.IsCancellationRequested)
                     throw;
@@ -231,6 +254,7 @@ namespace Communication.ModBus.ModBusRTU
             }
             catch (Exception e)
             {
+                logger?.Error("Receive response error: {e.Message}", e.Message);
                 return Rx<byte[]>.Fail(e.ToString());
             }
         }

@@ -1,5 +1,4 @@
 ﻿using Communication.ModBus.Common;
-using System.ComponentModel.DataAnnotations;
 
 namespace Communication.ModBus.Utils
 {
@@ -31,7 +30,7 @@ namespace Communication.ModBus.Utils
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. tx.Data,
                     ];
-                    
+
                 // 构建写入帧（多个写入）
                 else
                     frame =
@@ -45,7 +44,7 @@ namespace Communication.ModBus.Utils
                         .. tx.Data,
                     ];
             }
-            
+
             // 构建读取帧
             else
             {
@@ -69,19 +68,20 @@ namespace Communication.ModBus.Utils
         /// 解析ModBus接收帧中的线圈数据。
         /// </summary>
         /// <param name="rx">ModBus接收帧</param>
-        /// <param name="length">线圈数量</param>
-        /// <returns>线圈数据</returns>
-        public static ushort[] ParseCoils(byte[] rx, ushort length)
+        /// <param name="length">读取线圈数量</param>
+        /// <returns>读取到的线圈数据</returns>
+        public static ushort[] ParseCoils(byte[] rx, int length)
         {
             ushort[] result = new ushort[length];
 
-            for (int i = 0; i < length; i++)
+            for (ushort i = 0; i < length; i++)
             {
-                int byteIndex = i / 8;     // 第几个字节
-                int bitIndex = i % 8;      // 第几位（低位在前）
-                                           // 获取 0 或 1
-                result[i] = (ushort)((rx[3 + byteIndex] >> bitIndex) & 0x01);
-            }
+                var byteIndex = i / 8;
+                var bitIndex = i % 8;
+
+                result[i] = (ushort)((rx[3 + byteIndex] >> bitIndex) & 1);
+            }            
+
             return result;
         }
 
@@ -89,16 +89,15 @@ namespace Communication.ModBus.Utils
         /// 解析ModBus接收帧中的寄存器数据。
         /// </summary>
         /// <param name="rx">ModBus接收帧</param>
-        /// <param name="length">寄存器数量</param>
-        /// <returns>寄存器数据</returns>
+        /// <param name="length">读取寄存器数量</param>
+        /// <returns>读取到的寄存器数据</returns>
         public static ushort[] ParseRegisters(byte[] rx, ushort length)
         {
             ushort[] result = new ushort[length];
 
             for (int i = 0; i < length; i++)
             {
-                int index = 3 + i * 2;
-
+                var index = 3 + i * 2;
                 result[i] = (ushort)((rx[index] << 8) | rx[index + 1]);
             }
             return result;

@@ -12,7 +12,7 @@ namespace Communication.Test
     public partial class MainWindowViewModel : ObservableObject
     {
         private readonly ModBusRTUMaster mr;
-        private readonly ISerilog log;
+        // private readonly ISerilog log;
         private bool isConnected = false;
         public bool IsConnected
         {
@@ -39,7 +39,10 @@ namespace Communication.Test
 
         public MainWindowViewModel()
         {
-            this.mr = new ModBusRTUMaster(log, Config);
+            Logger log = new();
+            Serilogger.SetInstance(log);
+
+            this.mr = new ModBusRTUMaster(Config);
 
             // 监听功能码变化, 对应DataGrid的变化
             Tx.OnFunctionCodeChanged += (f) =>
@@ -90,6 +93,8 @@ namespace Communication.Test
                 return;
 
             var currentAdrs = Tx.Start; // 记录当前地址
+            var currentLength = Tx.Length;
+
             Tx.Data = txData;
             CancellationTokenSource tk = new();
 
@@ -99,10 +104,26 @@ namespace Communication.Test
 
             if (r.IsSuccess && r.Data != null && r.Data[1] < (byte)ModBusFunctionCode.WriteCoils)
             {
-                foreach (var b in r.Data)
+                // var coilsData = ModBusTools.ParseCoils(r.Data, currentLength);
+
+                // for (int i = 0; i < currentLength; i++)
+                // {
+                //     DataList.Add(new ModBusData()
+                //     {
+                //         Address = (ushort)(currentAdrs + i),
+                //         Value = coilsData[i]
+                //     });
+                // }
+
+                var registerData = ModBusTools.ParseRegisters(r.Data, currentLength);
+
+                for (int i = 0; i < currentLength; i++)
                 {
-                    DataList.Add(new ModBusData() { Address = currentAdrs, Value = b });
-                    currentAdrs++;
+                    DataList.Add(new ModBusData()
+                    {
+                        Address = (ushort)(currentAdrs + i),
+                        Value = registerData[i]
+                    });
                 }
             }
             else
@@ -140,7 +161,7 @@ namespace Communication.Test
         {
             var temp = DataList.Select(x => x.Value).ToArray();
             txData = temp.ToByteArrayBigEndian();
-            
+
 
             // 功能区分，处理写入数据和读取数据
             if (Tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
@@ -172,9 +193,9 @@ namespace Communication.Test
             if (newValue > 128)
                 newValue = 127;
 
-            for(ushort i = 0; i < newValue; i++)
+            for (ushort i = 0; i < newValue; i++)
             {
-                DataList.Add(new ModBusData() { Address = i});
+                DataList.Add(new ModBusData() { Address = i });
             }
 
             Tx.Length = newValue;

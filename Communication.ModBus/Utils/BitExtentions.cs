@@ -1,6 +1,4 @@
-﻿using System.Xml;
-
-namespace Communication.ModBus.Utils
+﻿namespace Communication.ModBus.Utils
 {
     /// <summary>
     /// Ushort类型的工具类，提供将ushort转换为字节数组的方法，以及从字节数组转换回ushort的方法。
@@ -141,12 +139,6 @@ namespace Communication.ModBus.Utils
             return result;
         }
 
-        public static byte[] ToCoil(this ushort[] values)
-        {
-            byte[] txData = values.ToByteArrayBigEndian();
-            return txData.ToCoils();
-        }
-
 
         /// <summary>
         /// 转换byte[] ：相邻的两个字节任意一个不为0x00，则将两个字节置为0xFF 00，写入线圈时适用
@@ -156,7 +148,7 @@ namespace Communication.ModBus.Utils
         public static byte[] ToCoils(this byte[] txData)
         {
             if (txData == null || txData.Length % 2 != 0)
-                throw new ArgumentException("请检查输入的Write Data");
+                throw new ArgumentException("Tx Data must be even length.");
 
             for (int i = 0; i < txData.Length; i += 2)
             {
