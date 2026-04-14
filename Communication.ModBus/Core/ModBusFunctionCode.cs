@@ -1,4 +1,4 @@
-﻿namespace Communication.ModBus.Common
+﻿namespace Communication.ModBus.Core
 {
     public enum ModBusFunctionCode
     {

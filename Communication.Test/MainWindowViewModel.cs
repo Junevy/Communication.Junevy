@@ -1,4 +1,4 @@
-﻿using Communication.ModBus.Common;
+﻿using Communication.ModBus.Core;
 using Communication.ModBus.ModBusRTU;
 using Communication.ModBus.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,7 +12,7 @@ namespace Communication.Test
     public partial class MainWindowViewModel : ObservableObject
     {
         private readonly ModBusRTUMaster mr;
-        // private readonly ISerilog log;
+        
         private bool isConnected = false;
         public bool IsConnected
         {

@@ -1,9 +1,9 @@
 ﻿using Communication.ModBus.Common;
 
-namespace Communication.ModBus.Utils
+namespace Communication.ModBus.Common
 {
    /// <summary>
-   /// Discarded class.
+   /// Logger class.
    /// </summary>
    public sealed class Serilogger : IDisposable
    {

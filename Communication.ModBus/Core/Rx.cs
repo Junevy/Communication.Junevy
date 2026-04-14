@@ -1,4 +1,4 @@
-﻿namespace Communication.ModBus.Common
+﻿namespace Communication.ModBus.Core
 {
     /// <summary>
     /// ModBus 响应数据类，用于封装 ModBus 响应数据。

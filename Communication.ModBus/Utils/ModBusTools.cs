@@ -1,9 +1,11 @@
-﻿using Communication.ModBus.Common;
+﻿using Communication.ModBus.Core;
 
 namespace Communication.ModBus.Utils
 {
     public static class ModBusTools
     {
+        public const int MODBUS_PORT = 502;
+
         /// <summary>
         /// 构建ModBus发送帧。
         /// </summary>
@@ -101,6 +103,24 @@ namespace Communication.ModBus.Utils
                 result[i] = (ushort)((rx[index] << 8) | rx[index + 1]);
             }
             return result;
+        }
+
+        public static bool ValidateAddress(string address)
+        {
+            if (address == null || string.IsNullOrEmpty(address))
+                return false;
+
+            return true;
+        }
+
+        public static bool ValidatePort(int port)
+        {
+            if (port == MODBUS_PORT) return true;
+
+            if (port <= 1024 || port > 65535)
+                return false;
+
+            return true;
         }
     }
 }

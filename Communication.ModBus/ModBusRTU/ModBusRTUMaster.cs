@@ -1,28 +1,36 @@
 ﻿using Communication.ModBus.Common;
 using Communication.ModBus.Utils;
+using Communication.ModBus.Core;
 using System.IO.Ports;
 
 namespace Communication.ModBus.ModBusRTU
 {
     public sealed class ModBusRTUMaster(ModBusRTUConfig config) : IModBus
     {
-        private bool disposed;
+        private bool disposed = false;
         private readonly ISerilog? logger = Serilogger.Instance;
 
         public bool IsConnected => serialPort.IsOpen;
+        public bool AutoReceiveAfterSend {get; set;} = true;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
+        /// <summary>
+        /// ModBus 配置参数。
+        /// </summary>
+        /// <exception cref="ArgumentNullException">当配置参数为 null 时，抛出异常。</exception>
         public ModBusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
+
 
         public bool Connect()
         {
             ThrowIfDisposed();
+
             if (serialPort.IsOpen)
             {
                 Disconnect();
             }
 
-            ConfigurePort();
+            InitialConnection();
 
             try
             {
@@ -36,11 +44,7 @@ namespace Communication.ModBus.ModBusRTU
             return true;
         }
 
-        /// <summary>
-        /// 配置串口参数。
-        /// </summary>
-        /// <exception cref="Exception">当串口参数无效时，抛出异常。</exception>
-        private void ConfigurePort()
+        private void InitialConnection()
         {
             if (IsConnected) return;
 
@@ -62,7 +66,6 @@ namespace Communication.ModBus.ModBusRTU
                 logger?.Error("Configure port failed: {@Config}, {Exception}", Config, ex.Message);
                 throw;
             }
-
         }
 
         public void Disconnect()
@@ -72,6 +75,7 @@ namespace Communication.ModBus.ModBusRTU
                 if (!IsConnected)
                     serialPort.Close();
                 this.serialPort.Dispose();
+                disposed = true;
             }
             catch (Exception ex)
             {
@@ -80,24 +84,12 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        /// <summary>
-        /// 构建执行请求。
-        /// </summary>
-        /// <param name="tx">ModBus 请求数据。</param>
-        /// <param name="token">取消令牌。</param>
-        /// <returns>执行结果。</returns>
-        public Rx<byte[]> Build_Execute_Tx(Tx tx, CancellationToken token = default)
+        public Rx<byte[]> Send(Tx tx)
         {
-            return Build_Execute_TxAsync(tx, token).GetAwaiter().GetResult();
+            return SendAsync(tx).GetAwaiter().GetResult();
         }
 
-        /// <summary>
-        /// 构建执行请求。
-        /// </summary>
-        /// <param name="tx">ModBus 请求数据。</param>
-        /// <param name="token">取消令牌。</param>
-        /// <returns>执行结果。</returns>
-        public async Task<Rx<byte[]>> Build_Execute_TxAsync(Tx tx, CancellationToken token = default)
+        public async Task<Rx<byte[]>> SendAsync(Tx tx, CancellationToken token = default)
         {
             logger?.Information("Build Execute Tx: {@Tx}", tx);
 
@@ -147,7 +139,6 @@ namespace Communication.ModBus.ModBusRTU
             Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
-            // string lastError = string.Empty;
 
             try
             {
@@ -165,7 +156,12 @@ namespace Communication.ModBus.ModBusRTU
 
                         // 异步处理
                         await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
-                        var receiveResult = await ReceiveRxAsync(slaveID, functionCode, token);
+                        if (!AutoReceiveAfterSend)
+                        {
+                            continue;
+                        } 
+
+                        var receiveResult = await ReceiveAsync(slaveID, functionCode, token);
 
                         if (!receiveResult.IsSuccess)
                         {
@@ -185,7 +181,7 @@ namespace Communication.ModBus.ModBusRTU
                         logger?.Error("Execute request error!", ex);
                     }
                 }
-                logger?.Warning("Failed after retries.");
+                logger?.Warning("Failed after retries. and {AutoReceiveAfterSend:}", AutoReceiveAfterSend);
                 return Rx<T>.Fail("Failed after retries.");
             }
             finally
@@ -194,14 +190,13 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        /// <summary>
-        /// 接收响应。
-        /// </summary>
-        /// <param name="slaveID">从站ID。</param>
-        /// <param name="funcCode">功能码。</param>
-        /// <param name="token">取消令牌。</param>
-        /// <returns>执行结果。</returns>
-        private async Task<Rx<byte[]>> ReceiveRxAsync(byte slaveID, byte funcCode, CancellationToken token)
+
+        public Rx<byte[]> Receive(byte slaveID, byte funcCode)
+        {
+            return ReceiveAsync(slaveID, funcCode).GetAwaiter().GetResult();
+        }
+
+        public async Task<Rx<byte[]>> ReceiveAsync(byte slaveID, byte funcCode, CancellationToken token = default)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -216,16 +211,13 @@ namespace Communication.ModBus.ModBusRTU
                     int count = 0;
                     try
                     {
-                        // 使用 Task.Run 包装同步 Read 方法
-                        // 这样既能真正响应串口的 2000ms ReadTimeout，又能在等待期间不阻塞主线程
+                        //实现串口的 2000ms ReadTimeout，且在等待期间不阻塞主线程
                         count = await Task.Run(() => this.serialPort.Read(temp, 0, temp.Length), token);
                     }
                     catch (TimeoutException)
                     {
                         logger?.Error("Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
-                        // 当 2000ms 没有读到任何数据时，原生 Read 方法会抛出 TimeoutException
-                        // 对于 Modbus RTU 来说，帧超时通常意味着读取失败或从站没响应
-                        return Rx<byte[]>.Fail("读取从站超时 (2000ms)");
+                        return Rx<byte[]>.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
                     }
 
                     if (count <= 0) continue;
@@ -239,7 +231,7 @@ namespace Communication.ModBus.ModBusRTU
                         return Rx<byte[]>.Success(frame);
                     }
 
-                    // 如果还没凑够一帧，稍微等待一下给Slave一点缓冲时间
+                    // 如果还没凑够一帧，等待一下给Slave一点缓冲时间
                     logger?.Debug("Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
                     await Task.Delay(Config.IntervalTime, token);
                 }
@@ -247,7 +239,7 @@ namespace Communication.ModBus.ModBusRTU
             catch (OperationCanceledException oex)
             {
                 logger?.Error("Receive response error: {oex.Message}", oex.Message);
-                // 捕获到全局 token 被取消（比如用户主动停止通讯）
+                // 捕获到全局 token 被取消（比如主动停止通讯）
                 if (token.IsCancellationRequested)
                     throw;
                 return Rx<byte[]>.Fail(oex.ToString());
@@ -264,6 +256,7 @@ namespace Communication.ModBus.ModBusRTU
             if (serialPort.IsOpen)
                 Disconnect();
             serialPort.Dispose();
+            disposed = true;
         }
 
         /// <summary>
