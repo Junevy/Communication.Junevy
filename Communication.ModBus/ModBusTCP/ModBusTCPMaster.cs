@@ -8,13 +8,17 @@ namespace Communication.ModBus.ModBusTCP
     public sealed class ModBusTCPMaster : IModBus
     {
         private Socket socket;
+        private readonly ISerilog? logger = Serilogger.Instance;
+
         public ModBusTCPConfig Config { get; private set; } 
         public bool IsConnected => socket.Connected;
+
+        public ModbusProtocolType ProtocolType => ModbusProtocolType.TCP;
 
         public ModBusTCPMaster(ModBusTCPConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
             this.Config = config;
         }
 
@@ -30,7 +34,15 @@ namespace Communication.ModBus.ModBusTCP
 
         public void Disconnect()
         {
-            throw new NotImplementedException();
+            try
+            {
+                socket.Disconnect(true);
+                socket.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger?.Warning("Close socket has been occured an error : {ex.Message}", ex.Message);      
+            }
         }
 
         public void Dispose()

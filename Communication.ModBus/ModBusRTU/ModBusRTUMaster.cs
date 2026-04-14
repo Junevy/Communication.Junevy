@@ -12,6 +12,7 @@ namespace Communication.ModBus.ModBusRTU
 
         public bool IsConnected => serialPort.IsOpen;
         public bool AutoReceiveAfterSend {get; set;} = true;
+        public ModbusProtocolType ProtocolType => ModbusProtocolType.RTU;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
         /// <summary>

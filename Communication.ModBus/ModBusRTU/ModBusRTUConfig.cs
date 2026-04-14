@@ -7,7 +7,7 @@ namespace Communication.ModBus.ModBusRTU
         /// <summary>
         /// 串口名称。
         /// </summary>
-        public string PortName { get; set; }
+        public string PortName { get; set; } = "COM1";
         
         /// <summary>
         /// 波特率。

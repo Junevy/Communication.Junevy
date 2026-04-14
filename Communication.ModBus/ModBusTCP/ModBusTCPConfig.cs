@@ -6,6 +6,22 @@ namespace Communication.ModBus.ModBusTCP
 
         public int Port {get; private set; } = 502;
 
+        public bool Reconnect {get; set;} = false;
+
+        /// <summary>
+        /// 写超时时间。
+        /// </summary>
+        public int WriteTimeOut { get; set; } = 2000;
+        
+        /// <summary>
+        /// 读超时时间。
+        /// </summary>
+        public int ReadTimeOut { get; set; } = 2000;
+        
+        /// <summary>
+        /// 重试次数。
+        /// </summary>
+        public int RetryCount { get; set; } = 0;
 
         public bool SetPort(int port = 502)
         {

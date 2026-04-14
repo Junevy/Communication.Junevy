@@ -7,9 +7,12 @@ namespace Communication.ModBus.Common
     /// </summary>
     interface IModBus : IDisposable
     {
-        public bool IsConnected { get; }
+        /// <summary>
+        /// 当前对象的协议类型
+        /// </summary>
+        public ModbusProtocolType ProtocolType { get; }
 
-        //public ModBusRTUConfig Config { get; set; }
+        public bool IsConnected { get; }
 
         /// <summary>
         /// 连接 ModBus 从站。
