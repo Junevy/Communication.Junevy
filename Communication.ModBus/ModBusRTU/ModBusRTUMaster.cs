@@ -11,7 +11,7 @@ namespace Communication.ModBus.ModBusRTU
         private readonly ISerilog? logger = Serilogger.Instance;
 
         public bool IsConnected => serialPort.IsOpen;
-        public bool AutoReceiveAfterSend {get; set;} = true;
+        // public bool AutoReceiveAfterSend {get; set;} = true;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.RTU;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
@@ -85,12 +85,12 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        public Rx<byte[]> Send(Tx tx)
+        public Rx<byte[]> Request(Tx tx)
         {
-            return SendAsync(tx).GetAwaiter().GetResult();
+            return RequestAsync(tx).GetAwaiter().GetResult();
         }
 
-        public async Task<Rx<byte[]>> SendAsync(Tx tx, CancellationToken token = default)
+        public async Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken token = default)
         {
             logger?.Information("Build Execute Tx: {@Tx}", tx);
 
@@ -114,8 +114,8 @@ namespace Communication.ModBus.ModBusRTU
 
             try
             {
-                byte[] request = ModBusTools.BuildTxFrame(tx);
-                return await ExecuteAsync(request, (byte)tx.SlaveId, (byte)tx.FunctionCode, response =>
+                byte[] request = ModBusTools.BuildTxFrame(tx, ProtocolType);
+                return await ExecuteAsync(request, tx, response =>
                 {
                     return ModBusRxParser.ParseRx(response, tx);
                 }, token);
@@ -136,8 +136,7 @@ namespace Communication.ModBus.ModBusRTU
         /// <param name="parser">响应解析器。</param>
         /// <param name="token">取消令牌。</param>
         /// <returns>执行结果。</returns>
-        private async Task<Rx<T>> ExecuteAsync<T>(byte[] request, byte slaveID, byte functionCode,
-            Func<byte[], Rx<T>> parser, CancellationToken token = default)
+        private async Task<Rx<T>> ExecuteAsync<T>(byte[] request, Tx tx, Func<byte[], Rx<T>> parser, CancellationToken token = default)
         {
             ThrowIfDisposed();
 
@@ -157,12 +156,8 @@ namespace Communication.ModBus.ModBusRTU
 
                         // 异步处理
                         await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
-                        if (!AutoReceiveAfterSend)
-                        {
-                            continue;
-                        } 
 
-                        var receiveResult = await ReceiveAsync(slaveID, functionCode, token);
+                        var receiveResult = await ReceiveAsync(tx, token);
 
                         if (!receiveResult.IsSuccess)
                         {
@@ -182,7 +177,6 @@ namespace Communication.ModBus.ModBusRTU
                         logger?.Error("Execute request error!", ex);
                     }
                 }
-                logger?.Warning("Failed after retries. and {AutoReceiveAfterSend:}", AutoReceiveAfterSend);
                 return Rx<T>.Fail("Failed after retries.");
             }
             finally
@@ -191,13 +185,7 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-
-        public Rx<byte[]> Receive(byte slaveID, byte funcCode)
-        {
-            return ReceiveAsync(slaveID, funcCode).GetAwaiter().GetResult();
-        }
-
-        public async Task<Rx<byte[]>> ReceiveAsync(byte slaveID, byte funcCode, CancellationToken token = default)
+        private async Task<Rx<byte[]>> ReceiveAsync(Tx tx, CancellationToken token = default)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -226,7 +214,7 @@ namespace Communication.ModBus.ModBusRTU
                     buffer.AddRange(temp.AsSpan(0, count));
 
                     // 尝试解析 Modbus 帧
-                    if (ModBusRxParser.TryExtractRxFrame(buffer, slaveID, funcCode, out var frame))
+                    if (ModBusRxParser.TryExtractRxFrame(buffer, (byte)tx.SlaveId, (byte)tx.FunctionCode, out var frame))
                     {
                         logger?.Information("Try parse frame success: {@Rx.Data}", frame);
                         return Rx<byte[]>.Success(frame);

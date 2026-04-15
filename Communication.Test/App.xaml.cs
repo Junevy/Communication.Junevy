@@ -9,6 +9,7 @@ namespace Communication.Test
     /// </summary>
     public partial class App : Application
     {
+        
     }
 
 }

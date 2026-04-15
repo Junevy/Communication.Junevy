@@ -6,13 +6,45 @@ namespace Communication.ModBus.Utils
     {
         public const int MODBUS_PORT = 502;
 
+        public static bool CheckTx(Tx tx)
+        {
+            if (tx.Data == null || tx.Data.Length == 0) return false;
+
+            if (tx.SlaveId < 0 || tx.SlaveId > 255)
+                return false;
+
+            if (tx.FunctionCode < ModBusFunctionCode.ReadCoils || tx.FunctionCode > ModBusFunctionCode.WriteMultiHodingRegister)
+                return false;
+
+            if (tx.Start < 0 || tx.Start > 0xFFFF)
+                return false;
+
+            if (tx.Length < 0 || tx.Length > 0xFFFF)
+                return false;
+
+            return true;
+        }
+
         /// <summary>
-        /// 构建ModBus发送帧。
+        /// 构建ModBus发送帧
         /// </summary>
-        /// <param name="tx">ModBus发送请求</param>
+        /// <param name="tx">ModBus发送请求帧对象</param>
         /// <returns>ModBus发送帧</returns>
-        /// <exception cref="ArgumentException">当功能码为0x05、0x06、0x0F、0x10、0x17时，且没有提供数据时，抛出异常。</exception>
-        public static byte[] BuildTxFrame(Tx tx)
+        /// <exception cref="InvalidDataException">当Tx无效时抛出异常</exception>
+        public static byte[] BuildTxFrame(Tx tx, ModbusProtocolType protocol)
+        {
+            if (!CheckTx(tx))
+                throw new InvalidDataException("Invalid Tx.");
+
+            if (protocol == ModbusProtocolType.RTU)
+                return BuildRTUTxFrame(tx);
+            else if (protocol == ModbusProtocolType.TCP)
+                return BuildTCPTxFrame(tx);
+            else
+                throw new InvalidDataException("The protocol is not supported.");
+        }
+
+        public static byte[] BuildRTUTxFrame(Tx tx)
         {
             List<byte> frame = [];
 
@@ -66,8 +98,16 @@ namespace Communication.ModBus.Utils
             return [.. frame];
         }
 
+        public static byte[] BuildTCPTxFrame(Tx tx)
+        {
+            if (!CheckTx(tx))
+                throw new InvalidDataException("Invalid Tx.");
+
+            return [];
+        }
+
         /// <summary>
-        /// 解析ModBus接收帧中的线圈数据。
+        /// 解析ModBus接收帧中的线圈数据
         /// </summary>
         /// <param name="rx">ModBus接收帧</param>
         /// <param name="length">读取线圈数量</param>

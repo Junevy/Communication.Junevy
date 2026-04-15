@@ -1,4 +1,5 @@
 ﻿using Communication.ModBus.Core;
+using Communication.ModBus.Common;
 using Communication.ModBus.ModBusRTU;
 using Communication.ModBus.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,6 +7,8 @@ using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO.Ports;
 using System.Windows;
+using Communication.ModBus.Services;
+using Communication.ModBus.ModBusTCP;
 
 namespace Communication.Test
 {
@@ -77,60 +80,65 @@ namespace Communication.Test
         [RelayCommand]
         public void Connect()
         {
-            if (Config.PortName is null)
-            {
-                MessageBox.Show("The port name can not be null!");
-                return;
-            }
+            // if (Config.PortName is null)
+            // {
+            //     MessageBox.Show("The port name can not be null!");
+            //     return;
+            // }
 
-            mr.Connect();
+            // mr.Connect();
+            ModBusFactory factory = new();
+            var tcp = factory.Create(new ModBusTCPConfig());
+            tcp.Connect();
+
         }
 
         [RelayCommand]
         public async Task ExecuteAsync()
         {
-            if (!ProcessTxData(out byte[] txData))
-                return;
 
-            var currentAdrs = Tx.Start; // 记录当前地址
-            var currentLength = Tx.Length;
+            // if (!ProcessTxData(out byte[] txData))
+            //     return;
 
-            Tx.Data = txData;
-            CancellationTokenSource tk = new();
+            // var currentAdrs = Tx.Start; // 记录当前地址
+            // var currentLength = Tx.Length;
 
-            Console.WriteLine((ushort)Tx.FunctionCode);
+            // Tx.Data = txData;
+            // CancellationTokenSource tk = new();
 
-            var r = await mr.Build_Execute_TxAsync(Tx, tk.Token);
+            // Console.WriteLine((ushort)Tx.FunctionCode);
 
-            if (r.IsSuccess && r.Data != null && r.Data[1] < (byte)ModBusFunctionCode.WriteCoils)
-            {
-                // var coilsData = ModBusTools.ParseCoils(r.Data, currentLength);
+            // var r = await mr.SendAsync(Tx, tk.Token);
 
-                // for (int i = 0; i < currentLength; i++)
-                // {
-                //     DataList.Add(new ModBusData()
-                //     {
-                //         Address = (ushort)(currentAdrs + i),
-                //         Value = coilsData[i]
-                //     });
-                // }
+            // if (r.IsSuccess && r.Data != null && r.Data[1] < (byte)ModBusFunctionCode.WriteCoils)
+            // {
+            //     // var coilsData = ModBusTools.ParseCoils(r.Data, currentLength);
 
-                var registerData = ModBusTools.ParseRegisters(r.Data, currentLength);
+            //     // for (int i = 0; i < currentLength; i++)
+            //     // {
+            //     //     DataList.Add(new ModBusData()
+            //     //     {
+            //     //         Address = (ushort)(currentAdrs + i),
+            //     //         Value = coilsData[i]
+            //     //     });
+            //     // }
 
-                for (int i = 0; i < currentLength; i++)
-                {
-                    DataList.Add(new ModBusData()
-                    {
-                        Address = (ushort)(currentAdrs + i),
-                        Value = registerData[i]
-                    });
-                }
-            }
-            else
-            {
-                //var hexStr = r.Data?.ToHexString();
-                //MessageBox.Show(hexStr);
-            }
+            //     var registerData = ModBusTools.ParseRegisters(r.Data, currentLength);
+
+            //     for (int i = 0; i < currentLength; i++)
+            //     {
+            //         DataList.Add(new ModBusData()
+            //         {
+            //             Address = (ushort)(currentAdrs + i),
+            //             Value = registerData[i]
+            //         });
+            //     }
+            // }
+            // else
+            // {
+            //     //var hexStr = r.Data?.ToHexString();
+            //     //MessageBox.Show(hexStr);
+            // }
         }
 
         [RelayCommand]

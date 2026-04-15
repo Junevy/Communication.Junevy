@@ -11,7 +11,9 @@ namespace Communication.ModBus.Core
         /// </summary>
         public event Action<ModBusFunctionCode>? OnFunctionCodeChanged;
 
-        public ushort ProtocolType {get; set;} = 0x00;
+        public ushort TransactionId { get; set; } = 0x0000;
+
+        public ushort ProtocolType {get; set;} = 0x0000;
 
         /// <summary>
         /// 从站ID。

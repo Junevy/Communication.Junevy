@@ -4,9 +4,16 @@ namespace Communication.ModBus.ModBusTCP
     {
         public string Address {get; set;} = "127.0.0.1";
 
-        public int Port {get; private set; } = 502;
+        public int Port {get; private set; } = 9600;
 
         public bool Reconnect {get; set;} = false;
+
+
+        public bool AutoReceive {get; set;} = true;
+        /// <summary>
+        /// 连接超时时间。
+        /// </summary>
+        public int ConnectTimeout { get; set; } = 2000;
 
         /// <summary>
         /// 写超时时间。

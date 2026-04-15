@@ -5,12 +5,14 @@ namespace Communication.ModBus.Common
     /// <summary>
     /// ModBus 接口，用于定义 ModBus 操作。
     /// </summary>
-    interface IModBus : IDisposable
+    public interface IModBus : IDisposable
     {
         /// <summary>
         /// 当前对象的协议类型
         /// </summary>
         public ModbusProtocolType ProtocolType { get; }
+
+        // public bool IsAutoReceive { get; set; }
 
         public bool IsConnected { get; }
 
@@ -25,42 +27,8 @@ namespace Communication.ModBus.Common
         /// </summary>
         public void Disconnect();
 
-        /// <summary>
-        /// 初始化 ModBus 连接。
-        /// </summary>
-        /// <exception cref="Exception">当配置参数无效时，抛出异常。</exception>
-        // public void InitialConnection();
+        public Rx<byte[]> Request(Tx tx);
 
-        /// <summary>
-        /// 发送 ModBus 报文。
-        /// </summary>
-        /// <param name="tx">ModBus 请求报文。</param>
-        /// <returns>ModBus 响应报文。</returns>
-        public Rx<byte[]> Send(Tx tx);
-
-        /// <summary>
-        /// 异步发送 ModBus 报文。
-        /// </summary>
-        /// <param name="tx">ModBus 请求报文。</param>
-        /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>ModBus 响应报文。</returns>
-        public Task<Rx<byte[]>> SendAsync(Tx tx, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// 接收 ModBus 响应报文。
-        /// </summary>
-        /// <param name="slaveID">从站ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <returns>ModBus 响应报文。</returns>
-        public Rx<byte[]> Receive(byte slaveID, byte functionCode);
-
-        /// <summary>
-        /// 异步接收 ModBus 响应报文。
-        /// </summary>
-        /// <param name="slaveID">从站ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>ModBus 响应报文。</returns>
-        public Task<Rx<byte[]>> ReceiveAsync(byte slaveID, byte functionCode, CancellationToken cancellationToken = default);
+        public Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default);
     }
 }
