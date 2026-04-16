@@ -13,12 +13,12 @@ namespace Communication.ModBus.Core
 
         public ushort TransactionId { get; set; } = 0x0000;
 
-        public ushort ProtocolType {get; set;} = 0x0000;
+        public ModbusProtocolType ProtocolType {get; set;} 
 
         /// <summary>
         /// 从站ID。
         /// </summary>
-        public ushort SlaveId { get; set; } = 1;
+        public byte SlaveId { get; set; } = 1;
 
         /// <summary>
         /// 功能码。

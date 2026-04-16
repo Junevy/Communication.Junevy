@@ -8,19 +8,21 @@ namespace Communication.ModBus.Utils
 
         public static bool CheckTx(Tx tx)
         {
-            if (tx.Data == null || tx.Data.Length == 0) return false;
-
-            if (tx.SlaveId < 0 || tx.SlaveId > 255)
+            if (tx.Start < 0 || tx.Start > 0xFFFF
+                || tx.Length < 0
+                || tx.Length > 0xFFFF
+                || tx.SlaveId < 0 || tx.SlaveId > 255
+                || tx.FunctionCode < ModBusFunctionCode.ReadCoils
+                || tx.FunctionCode > ModBusFunctionCode.WriteMultiHodingRegister)
                 return false;
 
-            if (tx.FunctionCode < ModBusFunctionCode.ReadCoils || tx.FunctionCode > ModBusFunctionCode.WriteMultiHodingRegister)
-                return false;
+            if (tx.FunctionCode >= ModBusFunctionCode.ReadCoils && tx.FunctionCode <= ModBusFunctionCode.WriteMultiHodingRegister)
+            {
+                if (tx.Data == null || tx.Data.Length <= 0)
+                    return false;
+            }
 
-            if (tx.Start < 0 || tx.Start > 0xFFFF)
-                return false;
-
-            if (tx.Length < 0 || tx.Length > 0xFFFF)
-                return false;
+            if (tx.ProtocolType != 0x000) return false;
 
             return true;
         }
@@ -122,7 +124,7 @@ namespace Communication.ModBus.Utils
                 var bitIndex = i % 8;
 
                 result[i] = (ushort)((rx[3 + byteIndex] >> bitIndex) & 1);
-            }            
+            }
 
             return result;
         }

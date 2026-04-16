@@ -11,7 +11,6 @@ namespace Communication.ModBus.ModBusRTU
         private readonly ISerilog? logger = Serilogger.Instance;
 
         public bool IsConnected => serialPort.IsOpen;
-        // public bool AutoReceiveAfterSend {get; set;} = true;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.RTU;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
@@ -90,6 +89,12 @@ namespace Communication.ModBus.ModBusRTU
             return RequestAsync(tx).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// 执行请求
+        /// </summary>
+        /// <param name="tx">ModBus请求帧</param>
+        /// <param name="token">取消令牌</param>
+        /// <returns>执行结果</returns>
         public async Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken token = default)
         {
             logger?.Information("Build Execute Tx: {@Tx}", tx);
@@ -100,84 +105,22 @@ namespace Communication.ModBus.ModBusRTU
                 return Rx<byte[]>.Fail("Port not open");
             }
 
-            if (tx.Length == 0)
-            {
-                logger?.Warning("Read length can not be 0!");
-                return Rx<byte[]>.Fail("Read length can not be 0!");
-            }
-
-            if ( (tx.FunctionCode>= ModBusFunctionCode.WriteCoils) && tx.Data== null)
-            {
-                logger?.Warning("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10, function code: {Tx.FunctionCode}.", tx.FunctionCode);
-                return Rx<byte[]>.Fail("Data can not be null When function code is 0x05, 0x06, 0x0F, 0x10!");
-            }
-
-            try
-            {
-                byte[] request = ModBusTools.BuildTxFrame(tx, ProtocolType);
-                return await ExecuteAsync(request, tx, response =>
-                {
-                    return ModBusRxParser.ParseRx(response, tx);
-                }, token);
-            }
-            catch (Exception ex)
-            {
-                logger?.Error( "Execute request error!", ex);
-                return Rx<byte[]>.Fail(ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// 执行请求。
-        /// </summary>
-        /// <param name="request">请求数据。</param>
-        /// <param name="slaveID">从站ID。</param>
-        /// <param name="functionCode">功能码。</param>
-        /// <param name="parser">响应解析器。</param>
-        /// <param name="token">取消令牌。</param>
-        /// <returns>执行结果。</returns>
-        private async Task<Rx<T>> ExecuteAsync<T>(byte[] request, Tx tx, Func<byte[], Rx<T>> parser, CancellationToken token = default)
-        {
-            ThrowIfDisposed();
+            if (!ModBusTools.CheckTx(tx))
+                return Rx<byte[]>.Fail("Invalid Tx.", tx.Data);
 
             try
             {
                 await requestLock.WaitAsync(token);
+                var sendResult = await SendAsync(tx, token);
 
-                // 重试
-                for (int i = 0; i <= Config.RetryCount; i++)
-                {
-                    token.ThrowIfCancellationRequested();
+                if (!sendResult) return Rx<byte[]>.Fail("Send frame occured an error.");
 
-                    try
-                    {
-                        this.serialPort.DiscardInBuffer();  // 清除串口区缓存
-                        this.serialPort.DiscardOutBuffer();
-
-                        // 异步处理
-                        await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
-
-                        var receiveResult = await ReceiveAsync(tx, token);
-
-                        if (!receiveResult.IsSuccess)
-                        {
-                            logger?.Warning("Try parse frame error: {@Rx.Data}", receiveResult.Data);
-                            continue;
-                        }
-                        logger?.Information("Try parse frame success: {@Rx.Data}", receiveResult.Data);
-                        return parser(receiveResult.Data!);
-                    }
-                    catch (TimeoutException)
-                    {
-                        logger?.Error("Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger?.Error("Execute request error!", ex);
-                    }
-                }
-                return Rx<T>.Fail("Failed after retries.");
+                return await ReadAsync(tx, token);
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Execute request error!", ex);
+                return Rx<byte[]>.Fail(ex.Message);
             }
             finally
             {
@@ -185,7 +128,53 @@ namespace Communication.ModBus.ModBusRTU
             }
         }
 
-        private async Task<Rx<byte[]>> ReceiveAsync(Tx tx, CancellationToken token = default)
+        /// <summary>
+        /// 执行请求
+        /// </summary>
+        /// <param name="tx">ModBus请求帧</param>
+        /// <param name="token">取消令牌</param>
+        /// <returns>执行结果。</returns>
+        private async Task<bool> SendAsync(Tx tx, CancellationToken token = default)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                byte[] request = ModBusTools.BuildTxFrame(tx, ProtocolType);
+
+                token.ThrowIfCancellationRequested();
+                // 清除串口区缓存
+                this.serialPort.DiscardInBuffer();  
+                this.serialPort.DiscardOutBuffer();
+
+                // 异步处理
+                await Task.Run(() => serialPort.Write(request, 0, request.Length), token);
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                logger?.Error("Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
+                return false;
+            }
+            catch (OperationCanceledException)
+            {
+                logger?.Error("Send Task Cancelled.");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Execute request error!", ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 读取响应
+        /// </summary>
+        /// <param name="tx">ModBus请求帧</param>
+        /// <param name="token">取消令牌</param>
+        /// <returns>执行结果</returns>
+        private async Task<Rx<byte[]>> ReadAsync(Tx tx, CancellationToken token = default)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -194,7 +183,6 @@ namespace Communication.ModBus.ModBusRTU
             {
                 while (true)
                 {
-                    // 响应外部的全局取消请求（比如用户点击了停止按钮）
                     token.ThrowIfCancellationRequested();
 
                     int count = 0;
@@ -214,13 +202,14 @@ namespace Communication.ModBus.ModBusRTU
                     buffer.AddRange(temp.AsSpan(0, count));
 
                     // 尝试解析 Modbus 帧
-                    if (ModBusRxParser.TryExtractRxFrame(buffer, (byte)tx.SlaveId, (byte)tx.FunctionCode, out var frame))
+                    var parseResult = ModBusRxParser.ParseRx(buffer.ToArray(), tx);
+                    if (parseResult.IsSuccess)
                     {
-                        logger?.Information("Try parse frame success: {@Rx.Data}", frame);
-                        return Rx<byte[]>.Success(frame);
+                        logger?.Information("Try parse frame success: {@Rx.Data}", parseResult.Data);
+                        return Rx<byte[]>.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
                     }
 
-                    // 如果还没凑够一帧，等待一下给Slave一点缓冲时间
+                    // 等待读取完整的一帧
                     logger?.Debug("Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
                     await Task.Delay(Config.IntervalTime, token);
                 }
@@ -228,9 +217,6 @@ namespace Communication.ModBus.ModBusRTU
             catch (OperationCanceledException oex)
             {
                 logger?.Error("Receive response error: {oex.Message}", oex.Message);
-                // 捕获到全局 token 被取消（比如主动停止通讯）
-                if (token.IsCancellationRequested)
-                    throw;
                 return Rx<byte[]>.Fail(oex.ToString());
             }
             catch (Exception e)

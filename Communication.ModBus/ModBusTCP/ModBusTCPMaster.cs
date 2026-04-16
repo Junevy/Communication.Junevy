@@ -99,13 +99,13 @@ namespace Communication.ModBus.ModBusTCP
             {
                 requestLock.Release();
             }
-        }
+        }   
 
         private async Task<Rx<byte[]>> SendAsync(Tx tx, CancellationToken cancellationToken = default)
         {
             try
             {
-                var frame = ModBusTools.BuildTxFrame(tx, this.ProtocolType);
+                var frame = ModBusTools.BuildTCPTxFrame(tx);
 
                 using var sendTimeoutToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 sendTimeoutToken.CancelAfter(Config.WriteTimeOut);
