@@ -15,26 +15,17 @@ namespace Communication.ModBus.Core
         /// <returns>解析后的响应数据</returns>
         public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
         {
-            // 自动识别协议类型
-            // var protocolType = DetectProtocolType(response);
-            return ParseRx(response, tx, tx.ProtocolType);
-        }
+            if (response == null)
+                return Rx<byte[]>.Fail("The response is null.");
 
-        /// <summary>
-        /// 解析 ModBus 响应的数据
-        /// </summary>
-        /// <param name="response">ModBus 响应数据</param>
-        /// <param name="tx">ModBus 请求数据</param>
-        /// <param name="protocolType">ModBus 协议类型</param>
-        /// <returns>解析后的响应数据</returns>
-        public static Rx<byte[]> ParseRx(byte[] response, Tx tx, ModbusProtocolType protocolType)
-        {
             bool extractResult;
             byte[] extractFrame;
+            byte[] pdu = [];
 
-            if (protocolType == ModbusProtocolType.TCP)
+            if (tx.ProtocolType == ModbusProtocolType.TCP)
             {
                 extractResult = TryExtractTcpRx(response, tx.SlaveId, tx.FunctionCode, out extractFrame);
+                pdu = (byte[])extractFrame.Clone();
                 extractFrame = extractFrame.Skip(6).ToArray();
             }
             else
@@ -46,13 +37,20 @@ namespace Communication.ModBus.Core
                 return Rx<byte[]>.Fail("Extract frame failed", extractFrame);
             }
 
-            return (byte)tx.FunctionCode switch
+            var result = (byte)tx.FunctionCode switch
             {
-                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Length, protocolType),
-                0x05 or 0x06 => VerifyEchoRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Data, protocolType),
-                0x0F or 0x10 => VerifyMultiWriteRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Start, tx.Length, protocolType),
+                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Length, tx.ProtocolType),
+                0x05 or 0x06 => VerifyEchoRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Data, tx.ProtocolType),
+                0x0F or 0x10 => VerifyMultiWriteRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Start, tx.Length, tx.ProtocolType),
                 _ => Rx<byte[]>.Fail("The function code not support.", response),
             };
+
+            if (result.IsSuccess)
+            {
+                result.Data = pdu;
+                return result;
+            }
+            else return result;
         }
 
         /// <summary>
@@ -84,7 +82,7 @@ namespace Communication.ModBus.Core
         /// <param name="length">读取的长度</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        public static Rx<byte[]> VerifyReadRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort length, ModbusProtocolType protocolType)
+        private static Rx<byte[]> VerifyReadRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort length, ModbusProtocolType protocolType)
         {
             int expectedByteCount;  // 根据功能码预计的数据长度，用于创建数组存储数据
             byte byteCount = response[2];   // 字节计数
@@ -131,7 +129,7 @@ namespace Communication.ModBus.Core
         /// <param name="data">ModBus 请求数据</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        public static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, byte[]? data, ModbusProtocolType protocolType)
+        private static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, byte[]? data, ModbusProtocolType protocolType)
         {
             if (data == null)
             {
@@ -154,7 +152,7 @@ namespace Communication.ModBus.Core
                 logger?.Error("The function code error : {functionCode}, and {actualFunctionCode}", functionCode, response[1]);
                 return Rx<byte[]>.Fail($"The function code error : {functionCode}. " + $"The actual function code : {response[1]}", response);
             }
-            
+
             for (int i = dataIndex; i < data.Length; i++)
             {
                 if (response[i] != data[i - dataIndex])
@@ -187,7 +185,7 @@ namespace Communication.ModBus.Core
         /// <param name="length">写入的数据长度</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        public static Rx<byte[]> VerifyMultiWriteRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort startAddress, ushort length, ModbusProtocolType protocolType)
+        private static Rx<byte[]> VerifyMultiWriteRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort startAddress, ushort length, ModbusProtocolType protocolType)
         {
             var start = BitExtentions.ToUshort(response[3], response[2]);
             if (start != startAddress)    // 验证起始地址
@@ -197,19 +195,20 @@ namespace Communication.ModBus.Core
             }
 
             var byteCount = BitExtentions.ToUshort(response[5], response[4]);
-            var frameLength = protocolType == ModbusProtocolType.TCP ? byteCount + 6 : byteCount + 8;
-            
+            // var frameLength = protocolType == ModbusProtocolType.TCP ? byteCount + 6 : byteCount + 8;
+            var comName = protocolType == ModbusProtocolType.TCP ? "TCP" : "SerialPort";
+
             if (byteCount != length)    // 验证写入的数据长度
             {
                 logger?.Error("The length error. Actual {byteCount}, expected {length}", byteCount, length);
                 return Rx<byte[]>.Fail($"The length error. Actual {byteCount}, expected {length}.", response);
-            }   
-
-            if (response.Length != frameLength)   // 验证响应长度
-            {
-                logger?.Error("Invalid response length. Actual {response.Length}, expected {frameLength}", response.Length, frameLength);
-                return Rx<byte[]>.Fail($"Invalid response length. Actual {response.Length}, expected {frameLength}.", response);
             }
+
+            // if (response.Length != frameLength)   // 验证响应长度
+            // {
+            //     logger?.Error("Invalid response length. Actual {response.Length}, expected {frameLength}", response.Length, frameLength);
+            //     return Rx<byte[]>.Fail($"Invalid response length. Actual {response.Length}, expected {frameLength}.", response);
+            // }
 
             if (response[1] != (ushort)functionCode)
             {
@@ -226,7 +225,7 @@ namespace Communication.ModBus.Core
                 }
             }
 
-            logger?.Rx("SerialPort", response);
+            logger?.Rx(comName, response);
             return Rx<byte[]>.Success(response);
         }
 
@@ -249,7 +248,7 @@ namespace Communication.ModBus.Core
             ushort protocolId = BitExtentions.ToUshort(buffer[3], buffer[2]);   //协议标识
             ushort length = BitExtentions.ToUshort(buffer[5], buffer[4]);   // 字节计数
             byte unitId = buffer[6];   // 从站ID
-            
+
             if (protocolId != 0x0000)   // 验证协议ID（ModbusTCP 协议ID为0x0000）
             {
                 logger?.Warning("Invalid protocol ID: {protocolId}, remove first byte and continue.", protocolId);
@@ -263,8 +262,8 @@ namespace Communication.ModBus.Core
             }
 
             // 计算完整报文长度（MBAP头 + 数据部分）
-            int totalLength = 7 + length;
-            if (buffer.Length < totalLength)
+            int totalLength = 6 + length;
+            if (buffer.Length != totalLength)
                 return false;
 
             var candidate = buffer.Take(totalLength).ToArray(); // 提取完整报文
@@ -349,8 +348,8 @@ namespace Communication.ModBus.Core
 
                 // Read
                 if (id == slaveID && (byte)functionCode == funcCode
-                    && (functionCode == ModBusFunctionCode.ReadCoils 
-                    || functionCode == ModBusFunctionCode.ReadDiscreteInputs 
+                    && (functionCode == ModBusFunctionCode.ReadCoils
+                    || functionCode == ModBusFunctionCode.ReadDiscreteInputs
                     || functionCode == ModBusFunctionCode.ReadHodingRegister || functionCode == ModBusFunctionCode.ReadInputRegister))
                 {
                     int byteCount = buffer[2];
@@ -376,9 +375,9 @@ namespace Communication.ModBus.Core
 
                 //Write and Read
                 if (id == slaveID && (byte)functionCode == funcCode
-                    && (functionCode == ModBusFunctionCode.WriteCoils 
-                    || functionCode == ModBusFunctionCode.WriteMultiCoils 
-                    || functionCode == ModBusFunctionCode.WriteHodingRegister 
+                    && (functionCode == ModBusFunctionCode.WriteCoils
+                    || functionCode == ModBusFunctionCode.WriteMultiCoils
+                    || functionCode == ModBusFunctionCode.WriteHodingRegister
                     || functionCode == ModBusFunctionCode.WriteMultiHodingRegister))
                 {
                     var expectedLength = 8;

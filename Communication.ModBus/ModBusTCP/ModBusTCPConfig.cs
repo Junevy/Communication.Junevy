@@ -4,7 +4,7 @@ namespace Communication.ModBus.ModBusTCP
     {
         public string Address {get; set;} = "127.0.0.1";
 
-        public int Port {get; private set; } = 9600;
+        public int Port {get; private set; } = 502;
 
         public bool Reconnect {get; set;} = false;
 

@@ -5,16 +5,17 @@ namespace Communication.ModBus.Core
     /// </summary>
     public class Tx
     {
-
         /// <summary>
         /// 功能码改变事件。
         /// </summary>
         public event Action<ModBusFunctionCode>? OnFunctionCodeChanged;
+        public event Action<ModbusProtocolType>? OnProtocolTypeChanged;
 
         public ushort TransactionId { get; set; } = 0x0000;
 
-        public ModbusProtocolType ProtocolType {get; set;} 
+        public ModbusProtocolType ProtocolType {get; set;} = ModbusProtocolType.TCP;
 
+        public ushort ByteCount {get; set;} = 0x00;
         /// <summary>
         /// 从站ID。
         /// </summary>
@@ -23,7 +24,7 @@ namespace Communication.ModBus.Core
         /// <summary>
         /// 功能码。
         /// </summary>
-        private ModBusFunctionCode functionCode = ModBusFunctionCode.ReadCoils;
+        private ModBusFunctionCode functionCode = ModBusFunctionCode.WriteMultiHodingRegister;
         public ModBusFunctionCode FunctionCode 
         {
             get => functionCode;
@@ -41,7 +42,7 @@ namespace Communication.ModBus.Core
         /// <summary>
         /// 数据长度。
         /// </summary>
-        public ushort Length { get; set; } = 0x01;
+        public ushort Length { get; set; } = 0x03;
 
         /// <summary>
         /// 数据。

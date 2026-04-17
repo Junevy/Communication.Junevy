@@ -140,7 +140,7 @@ namespace Communication.ModBus.ModBusRTU
 
             try
             {
-                byte[] request = ModBusTools.BuildTxFrame(tx, ProtocolType);
+                byte[] request = ModBusTools.BuildTxFrame(tx);
 
                 token.ThrowIfCancellationRequested();
                 // 清除串口区缓存

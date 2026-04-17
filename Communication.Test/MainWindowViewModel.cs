@@ -15,6 +15,7 @@ namespace Communication.Test
     public partial class MainWindowViewModel : ObservableObject
     {
         private readonly ModBusRTUMaster mr;
+        private IModBus tcp;
         
         private bool isConnected = false;
         public bool IsConnected
@@ -88,15 +89,23 @@ namespace Communication.Test
 
             // mr.Connect();
             ModBusFactory factory = new();
-            var tcp = factory.Create(new ModBusTCPConfig());
-            tcp.Connect();
-
+            this.tcp = factory.Create(new ModBusTCPConfig());
+            _ = tcp.Connect();
         }
 
         [RelayCommand]
         public async Task ExecuteAsync()
         {
+            
+            Tx tx = new Tx();
 
+            // byte[] test = [0x01];
+            // ushort test = 
+            tx.Data = [1, 2, 132];
+
+            var result = await tcp.RequestAsync(tx);
+
+            Console.Write(result);
             // if (!ProcessTxData(out byte[] txData))
             //     return;
 

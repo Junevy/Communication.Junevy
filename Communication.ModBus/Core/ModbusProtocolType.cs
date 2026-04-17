@@ -6,13 +6,13 @@ namespace Communication.ModBus.Core
     public enum ModbusProtocolType
     {
         /// <summary>
+        /// Modbus TCP协议
+        /// </summary>
+        TCP = 0x0000,
+
+        /// <summary>
         /// Modbus RTU协议
         /// </summary>
         RTU,
-        
-        /// <summary>
-        /// Modbus TCP协议
-        /// </summary>
-        TCP
     }
 }

@@ -29,7 +29,8 @@ namespace Communication.ModBus.ModBusTCP
 
             if (CheckConnection()) Disconnect();
 
-            return ConnectAsync().GetAwaiter().GetResult();
+            var result = Task.Run(ConnectAsync);
+            return result.GetAwaiter().GetResult();
         }
 
         private async Task<bool> ConnectAsync()
@@ -65,7 +66,11 @@ namespace Communication.ModBus.ModBusTCP
             }
         }
 
-        public Rx<byte[]> Request(Tx tx) => RequestAsync(tx).GetAwaiter().GetResult();
+        public Rx<byte[]> Request(Tx tx) 
+        {
+            var result = Task.Run(async () => await RequestAsync(tx));
+            return result.GetAwaiter().GetResult();
+        }
 
         public async Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default)
         {
@@ -105,7 +110,7 @@ namespace Communication.ModBus.ModBusTCP
         {
             try
             {
-                var frame = ModBusTools.BuildTCPTxFrame(tx);
+                var frame = ModBusTools.BuildTxFrame(tx);
 
                 using var sendTimeoutToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 sendTimeoutToken.CancelAfter(Config.WriteTimeOut);
@@ -156,7 +161,7 @@ namespace Communication.ModBus.ModBusTCP
 
                 var fullFrame = mbapHeaer.Concat(pdu).ToArray();
 
-                return ModBusRxParser.ParseRx(fullFrame, tx, this.ProtocolType);
+                return ModBusRxParser.ParseRx(fullFrame, tx);
             }
             catch (OperationCanceledException ex)
             {

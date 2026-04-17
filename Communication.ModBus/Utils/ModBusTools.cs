@@ -5,6 +5,7 @@ namespace Communication.ModBus.Utils
     public static class ModBusTools
     {
         public const int MODBUS_PORT = 502;
+        // public static readonly byte[] MODBUS_MBAP_HEADER = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
         public static bool CheckTx(Tx tx)
         {
@@ -16,13 +17,13 @@ namespace Communication.ModBus.Utils
                 || tx.FunctionCode > ModBusFunctionCode.WriteMultiHodingRegister)
                 return false;
 
-            if (tx.FunctionCode >= ModBusFunctionCode.ReadCoils && tx.FunctionCode <= ModBusFunctionCode.WriteMultiHodingRegister)
+            if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils && tx.FunctionCode <= ModBusFunctionCode.WriteMultiHodingRegister)
             {
                 if (tx.Data == null || tx.Data.Length <= 0)
                     return false;
             }
 
-            if (tx.ProtocolType != 0x000) return false;
+            if (tx.ProtocolType != 0x0000) return false;
 
             return true;
         }
@@ -33,22 +34,22 @@ namespace Communication.ModBus.Utils
         /// <param name="tx">ModBus发送请求帧对象</param>
         /// <returns>ModBus发送帧</returns>
         /// <exception cref="InvalidDataException">当Tx无效时抛出异常</exception>
-        public static byte[] BuildTxFrame(Tx tx, ModbusProtocolType protocol)
+        public static byte[] BuildTxFrame(Tx tx)
         {
             if (!CheckTx(tx))
                 throw new InvalidDataException("Invalid Tx.");
 
-            if (protocol == ModbusProtocolType.RTU)
+            if (tx.ProtocolType == ModbusProtocolType.RTU)
                 return BuildRTUTxFrame(tx);
-            else if (protocol == ModbusProtocolType.TCP)
+            else if (tx.ProtocolType == ModbusProtocolType.TCP)
                 return BuildTCPTxFrame(tx);
             else
                 throw new InvalidDataException("The protocol is not supported.");
         }
 
-        public static byte[] BuildRTUTxFrame(Tx tx)
+        private static byte[] BuildRTUTxFrame(Tx tx)
         {
-            List<byte> frame = [];
+            List<byte> frame;
 
             if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
             {
@@ -61,7 +62,7 @@ namespace Communication.ModBus.Utils
                 if (tx.FunctionCode == ModBusFunctionCode.WriteCoils || tx.FunctionCode == ModBusFunctionCode.WriteHodingRegister)
                     frame =
                     [
-                        (byte) tx.SlaveId,
+                        tx.SlaveId,
                         (byte) tx.FunctionCode,
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. tx.Data,
@@ -71,7 +72,7 @@ namespace Communication.ModBus.Utils
                 else
                     frame =
                     [
-                        (byte) tx.SlaveId,
+                        tx.SlaveId,
                         (byte) tx.FunctionCode,
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. BitExtentions.ToBytesByBigEndian(tx.Length),
@@ -86,7 +87,7 @@ namespace Communication.ModBus.Utils
             {
                 frame =
                 [
-                    (byte) tx.SlaveId,
+                    tx.SlaveId,
                     (byte) tx.FunctionCode,
                     .. BitExtentions.ToBytesByBigEndian(tx.Start),
                     .. BitExtentions.ToBytesByBigEndian(tx.Length),
@@ -100,12 +101,22 @@ namespace Communication.ModBus.Utils
             return [.. frame];
         }
 
-        public static byte[] BuildTCPTxFrame(Tx tx)
+        private static byte[] BuildTCPTxFrame(Tx tx)
         {
-            if (!CheckTx(tx))
-                throw new InvalidDataException("Invalid Tx.");
+            var baseFrame = BuildRTUTxFrame(tx);
+            tx.ByteCount = (ushort) (baseFrame.Length - 2);
+            var transactionId = (ushort)(tx.TransactionId + 0x01);
 
-            return [];
+            List<byte> frame = 
+            [
+                .. BitExtentions.ToBytesByBigEndian(transactionId),
+                0x00,
+                0x00,
+                .. BitExtentions.ToBytesByBigEndian(tx.ByteCount),
+                .. baseFrame.Take(baseFrame.Length - 2)
+            ];
+
+            return frame.ToArray();
         }
 
         /// <summary>
