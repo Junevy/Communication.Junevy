@@ -1,4 +1,4 @@
-namespace Communication.ModBus.ModBusTCP
+namespace Communication.ModBus.ModbusTCP
 {
     public class ModBusTCPConfig
     {

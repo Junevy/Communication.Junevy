@@ -13,11 +13,11 @@ namespace Communication.ModBus.Utils
                 || tx.Length < 0
                 || tx.Length > 0xFFFF
                 || tx.SlaveId < 0 || tx.SlaveId > 255
-                || tx.FunctionCode < ModBusFunctionCode.ReadCoils
-                || tx.FunctionCode > ModBusFunctionCode.WriteMultiHodingRegister)
+                || tx.FunctionCode < ModbusFunctionCode.ReadCoils
+                || tx.FunctionCode > ModbusFunctionCode.WriteMultiHodingRegisters)
                 return false;
 
-            if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils && tx.FunctionCode <= ModBusFunctionCode.WriteMultiHodingRegister)
+            if (tx.FunctionCode >= ModbusFunctionCode.WriteCoil && tx.FunctionCode <= ModbusFunctionCode.WriteMultiHodingRegisters)
             {
                 if (tx.Data == null || tx.Data.Length <= 0)
                     return false;
@@ -51,7 +51,7 @@ namespace Communication.ModBus.Utils
         {
             List<byte> frame;
 
-            if (tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
+            if (tx.FunctionCode >= ModbusFunctionCode.WriteCoil)
             {
                 if (tx.Data == null || tx.Data.Length <= 0)
                 {
@@ -59,7 +59,7 @@ namespace Communication.ModBus.Utils
                 }
 
                 // 构建写入帧（单个写入）
-                if (tx.FunctionCode == ModBusFunctionCode.WriteCoils || tx.FunctionCode == ModBusFunctionCode.WriteHodingRegister)
+                if (tx.FunctionCode == ModbusFunctionCode.WriteCoil || tx.FunctionCode == ModbusFunctionCode.WriteHodingRegister)
                     frame =
                     [
                         tx.SlaveId,
@@ -76,7 +76,7 @@ namespace Communication.ModBus.Utils
                         (byte) tx.FunctionCode,
                         .. BitExtentions.ToBytesByBigEndian(tx.Start),
                         .. BitExtentions.ToBytesByBigEndian(tx.Length),
-                        (byte)  (tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils
+                        (byte)  (tx.FunctionCode == ModbusFunctionCode.WriteMultiCoils
                                     ? (tx.Length + 7) / 8 : (tx.Length * 2) ),
                         .. tx.Data,
                     ];

@@ -1,14 +1,14 @@
 ﻿namespace Communication.ModBus.Core
 {
-    public enum ModBusFunctionCode
+    public enum ModbusFunctionCode
     {
         ReadCoils = 0x01,
         ReadDiscreteInputs = 0x02,
-        ReadHodingRegister = 0x03,
-        ReadInputRegister = 0x04,
-        WriteCoils = 0x05,
+        ReadHodingRegisters = 0x03,
+        ReadInputRegisters = 0x04,
+        WriteCoil = 0x05,
         WriteHodingRegister = 0x06,
         WriteMultiCoils = 0x0F,
-        WriteMultiHodingRegister = 0x10,
+        WriteMultiHodingRegisters = 0x10,
     }
 }

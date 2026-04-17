@@ -1,6 +1,6 @@
 ﻿using System.IO.Ports;
 
-namespace Communication.ModBus.ModBusRTU
+namespace Communication.ModBus.ModbusRTU
 {
     public class ModBusRTUConfig
     {

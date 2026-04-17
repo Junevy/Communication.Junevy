@@ -8,7 +8,7 @@ namespace Communication.ModBus.Core
         /// <summary>
         /// 功能码改变事件。
         /// </summary>
-        public event Action<ModBusFunctionCode>? OnFunctionCodeChanged;
+        public event Action<ModbusFunctionCode>? OnFunctionCodeChanged;
         public event Action<ModbusProtocolType>? OnProtocolTypeChanged;
 
         public ushort TransactionId { get; set; } = 0x0000;
@@ -24,8 +24,8 @@ namespace Communication.ModBus.Core
         /// <summary>
         /// 功能码。
         /// </summary>
-        private ModBusFunctionCode functionCode = ModBusFunctionCode.WriteMultiHodingRegister;
-        public ModBusFunctionCode FunctionCode 
+        private ModbusFunctionCode functionCode = ModbusFunctionCode.WriteMultiHodingRegisters;
+        public ModbusFunctionCode FunctionCode 
         {
             get => functionCode;
             set {

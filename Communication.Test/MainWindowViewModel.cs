@@ -1,21 +1,21 @@
 ﻿using Communication.ModBus.Core;
 using Communication.ModBus.Common;
-using Communication.ModBus.ModBusRTU;
+using Communication.ModBus.ModbusRTU;
 using Communication.ModBus.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO.Ports;
 using System.Windows;
-using Communication.ModBus.Services;
-using Communication.ModBus.ModBusTCP;
+using Communication.ModBus.ModbusTCP;
+using Communication.ModBus.Factory;
 
 namespace Communication.Test
 {
     public partial class MainWindowViewModel : ObservableObject
     {
-        private readonly ModBusRTUMaster mr;
-        private IModBus tcp;
+        private readonly ModBusRTU mr;
+        private IModbus tcp;
         
         private bool isConnected = false;
         public bool IsConnected
@@ -33,7 +33,7 @@ namespace Communication.Test
 
         public Array ParityList => Enum.GetValues(typeof(Parity));
         public Array StopBitsList => Enum.GetValues(typeof(StopBits));
-        public Array RegionList => Enum.GetValues(typeof(ModBusFunctionCode));
+        public Array RegionList => Enum.GetValues(typeof(ModbusFunctionCode));
         public int[] Bits { get; private set; } = [5, 6, 7, 8];
         public int[] BaudRates { get; private set; } = [9600, 19200, 38400, 57600, 115200];
         #endregion
@@ -46,12 +46,12 @@ namespace Communication.Test
             Logger log = new();
             Serilogger.SetInstance(log);
 
-            this.mr = new ModBusRTUMaster(Config);
+            this.mr = new ModBusRTU(Config);
 
             // 监听功能码变化, 对应DataGrid的变化
             Tx.OnFunctionCodeChanged += (f) =>
             {
-                if (f >= ModBusFunctionCode.WriteCoils)
+                if (f >= ModbusFunctionCode.WriteCoil)
                 {
                     if (DataList.Count < Length)
                     {
@@ -88,7 +88,7 @@ namespace Communication.Test
             // }
 
             // mr.Connect();
-            ModBusFactory factory = new();
+            ModbusFactory factory = new();
             this.tcp = factory.Create(new ModBusTCPConfig());
             _ = tcp.Connect();
         }
@@ -181,7 +181,7 @@ namespace Communication.Test
 
 
             // 功能区分，处理写入数据和读取数据
-            if (Tx.FunctionCode >= ModBusFunctionCode.WriteCoils)
+            if (Tx.FunctionCode >= ModbusFunctionCode.WriteCoil)
             {
                 if (txData == null || txData.Length <= 0)
                 {
@@ -189,9 +189,9 @@ namespace Communication.Test
                     return false;
                 }
 
-                if (Tx.FunctionCode == ModBusFunctionCode.WriteCoils)
+                if (Tx.FunctionCode == ModbusFunctionCode.WriteCoil)
                     txData = txData.ToCoils();
-                if (Tx.FunctionCode == ModBusFunctionCode.WriteMultiCoils)
+                if (Tx.FunctionCode == ModbusFunctionCode.WriteMultiCoils)
                     txData = temp.ToMultiCoils();
             }
             // 非写入功能，清空数据列表

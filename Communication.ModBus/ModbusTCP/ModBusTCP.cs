@@ -3,9 +3,9 @@ using Communication.ModBus.Common;
 using Communication.ModBus.Core;
 using Communication.ModBus.Utils;
 
-namespace Communication.ModBus.ModBusTCP
+namespace Communication.ModBus.ModbusTCP
 {
-    public sealed class ModBusTCPMaster : IModBus
+    public sealed class ModBusTCP : IModbus
     {
         private readonly Socket socket;
         private const int MbapHeaderLength = 6;
@@ -15,7 +15,7 @@ namespace Communication.ModBus.ModBusTCP
         public bool IsConnected => socket.Connected;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.TCP;
 
-        public ModBusTCPMaster(ModBusTCPConfig config)
+        public ModBusTCP(ModBusTCPConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
@@ -90,13 +90,13 @@ namespace Communication.ModBus.ModBusTCP
             }
         }
 
-        public Rx<byte[]> Request(Tx tx) 
+        public Rx Request(Tx tx) 
         {
             if (!CheckConnection())
-                return Rx<byte[]>.Fail("Not connected.");
+                return Rx.Fail("Not connected.");
 
             if (!ModBusTools.CheckTx(tx))
-                return Rx<byte[]>.Fail("Invalid Tx.");
+                return Rx.Fail("Invalid Tx.");
 
             requestLock.Wait();
 
@@ -111,7 +111,7 @@ namespace Communication.ModBus.ModBusTCP
             catch (Exception ex)
             {
                 logger?.Error("Request socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Request error.");
+                return Rx.Fail("Request error.");
             }
             finally
             {
@@ -119,7 +119,7 @@ namespace Communication.ModBus.ModBusTCP
             }
         }
 
-        private Rx<byte[]> Send(Tx tx)
+        private Rx Send(Tx tx)
         {
             try
             {
@@ -131,24 +131,24 @@ namespace Communication.ModBus.ModBusTCP
                 {
                     int sent = socket.Send(frame, totalSent, frame.Length - totalSent, SocketFlags.None);
                     if (sent == 0)
-                        return Rx<byte[]>.Fail("Connection closed during send.");
+                        return Rx.Fail("Connection closed during send.");
                     totalSent += sent;
                 }
-                return Rx<byte[]>.Success(frame);
+                return Rx.Success(frame);
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
             {
                 logger?.Warning("Send socket has been timeout : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Send timeout.");
+                return Rx.Fail("Send timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Send socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Send error.");
+                return Rx.Fail("Send error.");
             }
         }
 
-        private Rx<byte[]> Read(Tx tx)
+        private Rx Read(Tx tx)
         {
             try
             {
@@ -166,17 +166,17 @@ namespace Communication.ModBus.ModBusTCP
 
                 var fullFrame = mbapHeader.Concat(pdu).ToArray();
 
-                return ModBusRxParser.ParseRx(fullFrame, tx);
+                return ModbusRxParser.ParseRx(fullFrame, tx);
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
             {
                 logger?.Warning("Receive socket has been timeout : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Receive timeout.");
+                return Rx.Fail("Receive timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Receive socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Receive error.");
+                return Rx.Fail("Receive error.");
             }
         }
 
@@ -193,13 +193,14 @@ namespace Communication.ModBus.ModBusTCP
             return buffer;
         }
 
-        public async Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default)
+
+        public async Task<Rx> RequestAsync(Tx tx, CancellationToken cancellationToken = default)
         {
             if (!CheckConnection())
-                return Rx<byte[]>.Fail("Not connected.");
+                return Rx.Fail("Not connected.");
 
             if (!ModBusTools.CheckTx(tx))
-                return Rx<byte[]>.Fail("Invalid Tx.");
+                return Rx.Fail("Invalid Tx.");
 
             await requestLock.WaitAsync(cancellationToken);
 
@@ -214,12 +215,12 @@ namespace Communication.ModBus.ModBusTCP
             catch (OperationCanceledException ex)
             {
                 logger?.Warning("Request socket has been timeout : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Request timeout.");
+                return Rx.Fail("Request timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Request socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Request error.");
+                return Rx.Fail("Request error.");
             }
             finally
             {
@@ -227,7 +228,7 @@ namespace Communication.ModBus.ModBusTCP
             }
         }   
 
-        private async Task<Rx<byte[]>> SendAsync(Tx tx, CancellationToken cancellationToken = default)
+        private async Task<Rx> SendAsync(Tx tx, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -244,25 +245,25 @@ namespace Communication.ModBus.ModBusTCP
                     var sent = await socket.SendAsync(frame.AsMemory(totalSent), sendTimeoutToken.Token);
 
                     if (sent == 0)
-                        return Rx<byte[]>.Fail("Connection closed during send.");
+                        return Rx.Fail("Connection closed during send.");
 
                     totalSent += sent;
                 }
-                return Rx<byte[]>.Success(frame);
+                return Rx.Success(frame);
             }
             catch (OperationCanceledException ex)
             {
                 logger?.Warning("Send socket has been timeout : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Send timeout.");
+                return Rx.Fail("Send timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Send socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Send error.");
+                return Rx.Fail("Send error.");
             }
         }
 
-        private async Task<Rx<byte[]>> ReadAsync(Tx tx, CancellationToken cancellationToken = default)
+        private async Task<Rx> ReadAsync(Tx tx, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -282,17 +283,17 @@ namespace Communication.ModBus.ModBusTCP
 
                 var fullFrame = mbapHeaer.Concat(pdu).ToArray();
 
-                return ModBusRxParser.ParseRx(fullFrame, tx);
+                return ModbusRxParser.ParseRx(fullFrame, tx);
             }
             catch (OperationCanceledException ex)
             {
                 logger?.Warning("Receive socket has been timeout : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Receive timeout.");
+                return Rx.Fail("Receive timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Receive socket has been occured an error : {ex.Message}", ex.Message);
-                return Rx<byte[]>.Fail("Receive error.");
+                return Rx.Fail("Receive error.");
             }
         }
 

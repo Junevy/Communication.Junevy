@@ -3,7 +3,7 @@
     /// <summary>
     /// ModBus 接口，用于定义 ModBus 操作。
     /// </summary>
-    public interface IModBus : IDisposable
+    public interface IModbus : IDisposable
     {
         /// <summary>
         /// 当前对象的协议类型
@@ -37,7 +37,7 @@
         /// </summary>
         /// <param name="tx">ModBus 指令</param>
         /// <returns>ModBus 指令的响应</returns>
-        public Rx<byte[]> Request(Tx tx);
+        public Rx Request(Tx tx);
 
         /// <summary>
         /// 异步发送 ModBus 指令
@@ -45,6 +45,6 @@
         /// <param name="tx">ModBus 指令</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>ModBus 指令的响应</returns>
-        public Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default);
+        public Task<Rx> RequestAsync(Tx tx, CancellationToken cancellationToken = default);
     }
 }

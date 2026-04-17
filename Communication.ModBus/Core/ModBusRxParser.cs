@@ -3,7 +3,7 @@ using Communication.ModBus.Utils;
 
 namespace Communication.ModBus.Core
 {
-    public static class ModBusRxParser
+    public static class ModbusRxParser
     {
         private static readonly ISerilog? logger = Serilogger.Instance;
 
@@ -13,10 +13,10 @@ namespace Communication.ModBus.Core
         /// <param name="response">ModBus 响应数据</param>
         /// <param name="tx">ModBus 请求数据</param>
         /// <returns>解析后的响应数据</returns>
-        public static Rx<byte[]> ParseRx(byte[] response, Tx tx)
+        public static Rx ParseRx(byte[] response, Tx tx)
         {
             if (response == null)
-                return Rx<byte[]>.Fail("The response is null.");
+                return Rx.Fail("The response is null.");
 
             bool extractResult;
             byte[] extractFrame;
@@ -34,7 +34,7 @@ namespace Communication.ModBus.Core
             if (!extractResult)
             {
                 logger?.Error("Extract frame failed: {@extractFrame}", extractFrame);
-                return Rx<byte[]>.Fail("Extract frame failed", extractFrame);
+                return Rx.Fail("Extract frame failed", extractFrame);
             }
 
             var result = (byte)tx.FunctionCode switch
@@ -42,7 +42,7 @@ namespace Communication.ModBus.Core
                 0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Length, tx.ProtocolType),
                 0x05 or 0x06 => VerifyEchoRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Data, tx.ProtocolType),
                 0x0F or 0x10 => VerifyMultiWriteRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Start, tx.Length, tx.ProtocolType),
-                _ => Rx<byte[]>.Fail("The function code not support.", response),
+                _ => Rx.Fail("The function code not support.", response),
             };
 
             if (result.IsSuccess)
@@ -82,27 +82,27 @@ namespace Communication.ModBus.Core
         /// <param name="length">读取的长度</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        private static Rx<byte[]> VerifyReadRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort length, ModbusProtocolType protocolType)
+        private static Rx VerifyReadRx(byte[] response, byte slaveId, ModbusFunctionCode functionCode, ushort length, ModbusProtocolType protocolType)
         {
             int expectedByteCount;  // 根据功能码预计的数据长度，用于创建数组存储数据
             byte byteCount = response[2];   // 字节计数
             int expectedLength = protocolType == ModbusProtocolType.TCP ? 3 + byteCount : 3 + byteCount + 2;    // 根据字节计数计算的帧长度
             string comName = protocolType == ModbusProtocolType.TCP ? "TCP" : "SerialPort"; // 协议名称，记录log使用
 
-            if (functionCode == ModBusFunctionCode.ReadHodingRegister || functionCode == ModBusFunctionCode.ReadInputRegister)
+            if (functionCode == ModbusFunctionCode.ReadHodingRegisters || functionCode == ModbusFunctionCode.ReadInputRegisters)
                 expectedByteCount = length * 2;
             else expectedByteCount = (length + 7) / 8;
 
             if (byteCount != expectedByteCount)
             {
                 logger?.Error("Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}", expectedByteCount, byteCount);
-                return Rx<byte[]>.Fail($"Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}.", response);
+                return Rx.Fail($"Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}.", response);
             }
 
             if (response.Length != expectedLength)
             {
                 logger?.Error("Invalid response length. Actual {length}, expected {expectedLength}", response.Length, expectedLength);
-                return Rx<byte[]>.Fail($"Invalid response length. Actual {response.Length}, expected {expectedLength}.", response);
+                return Rx.Fail($"Invalid response length. Actual {response.Length}, expected {expectedLength}.", response);
             }
 
             // RTU 协议需要验证 CRC
@@ -111,12 +111,12 @@ namespace Communication.ModBus.Core
                 if (response[0] != slaveId || !CRC16.ValidateCRC(response))
                 {
                     logger?.Error("The slave id or CRC error : {slaveId}, actual {actualSlaveId}", slaveId, response[0]);
-                    return Rx<byte[]>.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
+                    return Rx.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
                 }
             }
 
             logger?.Rx(comName, response);
-            return Rx<byte[]>.Success(response);
+            return Rx.Success(response);
         }
 
         /// <summary>
@@ -129,12 +129,12 @@ namespace Communication.ModBus.Core
         /// <param name="data">ModBus 请求数据</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        private static Rx<byte[]> VerifyEchoRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, byte[]? data, ModbusProtocolType protocolType)
+        private static Rx VerifyEchoRx(byte[] response, byte slaveId, ModbusFunctionCode functionCode, byte[]? data, ModbusProtocolType protocolType)
         {
             if (data == null)
             {
                 logger?.Error("The data is null.");
-                return Rx<byte[]>.Fail("The data is null.", response);
+                return Rx.Fail("The data is null.", response);
             }
 
             var dataIndex = 4;  // 数据起始位置
@@ -144,13 +144,13 @@ namespace Communication.ModBus.Core
             if (data.Length != byteCount)
             {
                 logger?.Error("The request length is not equal to the data length. Actual {length}, expected {byteCount}", data.Length, byteCount);
-                return Rx<byte[]>.Fail($"The request length is not equal to the data length. Actual {data.Length}, expected {byteCount}.", response);
+                return Rx.Fail($"The request length is not equal to the data length. Actual {data.Length}, expected {byteCount}.", response);
             }
 
             if (response[1] != (ushort)functionCode)
             {
                 logger?.Error("The function code error : {functionCode}, and {actualFunctionCode}", functionCode, response[1]);
-                return Rx<byte[]>.Fail($"The function code error : {functionCode}. " + $"The actual function code : {response[1]}", response);
+                return Rx.Fail($"The function code error : {functionCode}. " + $"The actual function code : {response[1]}", response);
             }
 
             for (int i = dataIndex; i < data.Length; i++)
@@ -158,7 +158,7 @@ namespace Communication.ModBus.Core
                 if (response[i] != data[i - dataIndex])
                 {
                     logger?.Error("The data compared error. Actual {data}, expected {expectedData}", response[i], data[i - dataIndex]);
-                    return Rx<byte[]>.Fail($"The data compared error. Actual {response[i]}, expected {data[i - dataIndex]}.", response);
+                    return Rx.Fail($"The data compared error. Actual {response[i]}, expected {data[i - dataIndex]}.", response);
                 }
             }
 
@@ -167,12 +167,12 @@ namespace Communication.ModBus.Core
                 if (response[0] != slaveId || !CRC16.ValidateCRC(response))
                 {
                     logger?.Error("The slave id or CRC error : {slaveId}, actual {actualSlaveId}", slaveId, response[0]);
-                    return Rx<byte[]>.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
+                    return Rx.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
                 }
             }
 
             logger?.Rx(comName, response);
-            return Rx<byte[]>.Success(response);
+            return Rx.Success(response);
         }
 
         /// <summary>
@@ -185,13 +185,13 @@ namespace Communication.ModBus.Core
         /// <param name="length">写入的数据长度</param>
         /// <param name="protocolType">ModBus 协议类型</param>
         /// <returns>验证结果</returns>
-        private static Rx<byte[]> VerifyMultiWriteRx(byte[] response, byte slaveId, ModBusFunctionCode functionCode, ushort startAddress, ushort length, ModbusProtocolType protocolType)
+        private static Rx VerifyMultiWriteRx(byte[] response, byte slaveId, ModbusFunctionCode functionCode, ushort startAddress, ushort length, ModbusProtocolType protocolType)
         {
             var start = BitExtentions.ToUshort(response[3], response[2]);
             if (start != startAddress)    // 验证起始地址
             {
                 logger?.Error("The start address error. Actual {start}, expected {startAddress}", start, startAddress);
-                return Rx<byte[]>.Fail($"The start address error. Actual {start}, expected {startAddress}.", response);
+                return Rx.Fail($"The start address error. Actual {start}, expected {startAddress}.", response);
             }
 
             var byteCount = BitExtentions.ToUshort(response[5], response[4]);
@@ -201,19 +201,19 @@ namespace Communication.ModBus.Core
             if (byteCount != length)    // 验证写入的数据长度
             {
                 logger?.Error("The length error. Actual {byteCount}, expected {length}", byteCount, length);
-                return Rx<byte[]>.Fail($"The length error. Actual {byteCount}, expected {length}.", response);
+                return Rx.Fail($"The length error. Actual {byteCount}, expected {length}.", response);
             }
 
             // if (response.Length != frameLength)   // 验证响应长度
             // {
             //     logger?.Error("Invalid response length. Actual {response.Length}, expected {frameLength}", response.Length, frameLength);
-            //     return Rx<byte[]>.Fail($"Invalid response length. Actual {response.Length}, expected {frameLength}.", response);
+            //     return Rx.Fail($"Invalid response length. Actual {response.Length}, expected {frameLength}.", response);
             // }
 
             if (response[1] != (ushort)functionCode)
             {
                 logger?.Error("The function code error : {functionCode}, and {actualFunctionCode}", functionCode, response[1]);
-                return Rx<byte[]>.Fail($"The function code error : {functionCode}. " + $"The actual function code : {response[1]}", response);
+                return Rx.Fail($"The function code error : {functionCode}. " + $"The actual function code : {response[1]}", response);
             }
 
             if (protocolType == ModbusProtocolType.RTU)   // RTU 协议需要验证 CRC
@@ -221,12 +221,12 @@ namespace Communication.ModBus.Core
                 if (response[0] != slaveId || !CRC16.ValidateCRC(response))
                 {
                     logger?.Error("The slave id or CRC error : {slaveId}, actual {actualSlaveId}", slaveId, response[0]);
-                    return Rx<byte[]>.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
+                    return Rx.Fail($"The slave id or CRC error : {slaveId}, actual : {response[0]}.", response);
                 }
             }
 
             logger?.Rx(comName, response);
-            return Rx<byte[]>.Success(response);
+            return Rx.Success(response);
         }
 
         /// <summary>
@@ -237,7 +237,7 @@ namespace Communication.ModBus.Core
         /// <param name="functionCode">功能码</param>
         /// <param name="frame">提取到的报文（去除 MBAP 头）</param>
         /// <returns>是否成功提取</returns>
-        private static bool TryExtractTcpRx(byte[] buffer, byte slaveID, ModBusFunctionCode functionCode, out byte[] frame)
+        private static bool TryExtractTcpRx(byte[] buffer, byte slaveID, ModbusFunctionCode functionCode, out byte[] frame)
         {
             frame = buffer;
 
@@ -301,7 +301,7 @@ namespace Communication.ModBus.Core
         /// <param name="functionCode">功能码</param>
         /// <param name="frame">提取到的报文</param>
         /// <returns>是否成功提取</returns>
-        private static bool TryExtractRtuRx(List<byte> buffer, byte slaveID, ModBusFunctionCode functionCode, out byte[] frame)
+        private static bool TryExtractRtuRx(List<byte> buffer, byte slaveID, ModbusFunctionCode functionCode, out byte[] frame)
         {
             frame = [];
 
@@ -348,9 +348,9 @@ namespace Communication.ModBus.Core
 
                 // Read
                 if (id == slaveID && (byte)functionCode == funcCode
-                    && (functionCode == ModBusFunctionCode.ReadCoils
-                    || functionCode == ModBusFunctionCode.ReadDiscreteInputs
-                    || functionCode == ModBusFunctionCode.ReadHodingRegister || functionCode == ModBusFunctionCode.ReadInputRegister))
+                    && (functionCode == ModbusFunctionCode.ReadCoils
+                    || functionCode == ModbusFunctionCode.ReadDiscreteInputs
+                    || functionCode == ModbusFunctionCode.ReadHodingRegisters || functionCode == ModbusFunctionCode.ReadInputRegisters))
                 {
                     int byteCount = buffer[2];
                     var expectedLength = 3 + byteCount + 2;
@@ -375,10 +375,10 @@ namespace Communication.ModBus.Core
 
                 //Write and Read
                 if (id == slaveID && (byte)functionCode == funcCode
-                    && (functionCode == ModBusFunctionCode.WriteCoils
-                    || functionCode == ModBusFunctionCode.WriteMultiCoils
-                    || functionCode == ModBusFunctionCode.WriteHodingRegister
-                    || functionCode == ModBusFunctionCode.WriteMultiHodingRegister))
+                    && (functionCode == ModbusFunctionCode.WriteCoil
+                    || functionCode == ModbusFunctionCode.WriteMultiCoils
+                    || functionCode == ModbusFunctionCode.WriteHodingRegister
+                    || functionCode == ModbusFunctionCode.WriteMultiHodingRegisters))
                 {
                     var expectedLength = 8;
 
