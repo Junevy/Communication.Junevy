@@ -29,12 +29,36 @@ namespace Communication.ModBus.ModBusTCP
 
             if (CheckConnection()) Disconnect();
 
-            var result = Task.Run(ConnectAsync);
-            return result.GetAwaiter().GetResult();
+            try
+            {
+                var result = socket.BeginConnect(Config.Address, Config.Port, null, null);
+                bool success = result.AsyncWaitHandle.WaitOne(Config.ConnectTimeout, true);
+                if (success)
+                {
+                    socket.EndConnect(result);
+                    return true;
+                }
+                else
+                {
+                    socket.Close();
+                    logger?.Warning("Connect socket has been timeout: {Config.ConnectTimeout}ms", Config.ConnectTimeout);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Connect socket has been occured an error : {ex.Message}", ex.Message);
+                return false;
+            }
         }
 
-        private async Task<bool> ConnectAsync()
+        public async Task<bool> ConnectAsync()
         {
+            if (!ModBusTools.ValidateAddress(Config.Address) || !ModBusTools.ValidatePort(Config.Port))
+                return false;
+
+            if (CheckConnection()) Disconnect();
+
             using var cancellationToken = new CancellationTokenSource(Config.ConnectTimeout);
 
             try
@@ -68,8 +92,105 @@ namespace Communication.ModBus.ModBusTCP
 
         public Rx<byte[]> Request(Tx tx) 
         {
-            var result = Task.Run(async () => await RequestAsync(tx));
-            return result.GetAwaiter().GetResult();
+            if (!CheckConnection())
+                return Rx<byte[]>.Fail("Not connected.");
+
+            if (!ModBusTools.CheckTx(tx))
+                return Rx<byte[]>.Fail("Invalid Tx.");
+
+            requestLock.Wait();
+
+            try
+            {
+                var sendResult = Send(tx);
+                if (!sendResult.IsSuccess)
+                    return sendResult;
+
+                return Read(tx);
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Request socket has been occured an error : {ex.Message}", ex.Message);
+                return Rx<byte[]>.Fail("Request error.");
+            }
+            finally
+            {
+                requestLock.Release();
+            }
+        }
+
+        private Rx<byte[]> Send(Tx tx)
+        {
+            try
+            {
+                var frame = ModBusTools.BuildTxFrame(tx);
+                
+                socket.SendTimeout = Config.WriteTimeOut;
+                int totalSent = 0;
+                while (totalSent < frame.Length)
+                {
+                    int sent = socket.Send(frame, totalSent, frame.Length - totalSent, SocketFlags.None);
+                    if (sent == 0)
+                        return Rx<byte[]>.Fail("Connection closed during send.");
+                    totalSent += sent;
+                }
+                return Rx<byte[]>.Success(frame);
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+            {
+                logger?.Warning("Send socket has been timeout : {ex.Message}", ex.Message);
+                return Rx<byte[]>.Fail("Send timeout.");
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Send socket has been occured an error : {ex.Message}", ex.Message);
+                return Rx<byte[]>.Fail("Send error.");
+            }
+        }
+
+        private Rx<byte[]> Read(Tx tx)
+        {
+            try
+            {
+                socket.ReceiveTimeout = Config.ReadTimeOut;
+
+                // Read MBAP Header
+                var mbapHeaderArray = new byte[MbapHeaderLength];
+                var mbapHeader = ReadExact(mbapHeaderArray, MbapHeaderLength);
+
+                ushort remainder = (ushort)(mbapHeader[4] << 8 | mbapHeader[5]);
+                
+                // Read PDU
+                var pduFrameArray = new byte[remainder];
+                var pdu = ReadExact(pduFrameArray, remainder);
+
+                var fullFrame = mbapHeader.Concat(pdu).ToArray();
+
+                return ModBusRxParser.ParseRx(fullFrame, tx);
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+            {
+                logger?.Warning("Receive socket has been timeout : {ex.Message}", ex.Message);
+                return Rx<byte[]>.Fail("Receive timeout.");
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Receive socket has been occured an error : {ex.Message}", ex.Message);
+                return Rx<byte[]>.Fail("Receive error.");
+            }
+        }
+
+        private byte[] ReadExact(byte[] buffer, int length)
+        {
+            int received = 0;
+            while (received < length)
+            {
+                int readBytes = socket.Receive(buffer, received, length - received, SocketFlags.None);
+                if (readBytes == 0)
+                    throw new SocketException((int)SocketError.ConnectionReset);
+                received += readBytes;
+            }
+            return buffer;
         }
 
         public async Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default)

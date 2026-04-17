@@ -1,6 +1,4 @@
-﻿using Communication.ModBus.Core;
-
-namespace Communication.ModBus.Common
+﻿namespace Communication.ModBus.Core
 {
     /// <summary>
     /// ModBus 接口，用于定义 ModBus 操作。
@@ -12,8 +10,9 @@ namespace Communication.ModBus.Common
         /// </summary>
         public ModbusProtocolType ProtocolType { get; }
 
-        // public bool IsAutoReceive { get; set; }
-
+        /// <summary>
+        /// 是否已连接到 ModBus 从站
+        /// </summary>
         public bool IsConnected { get; }
 
         /// <summary>
@@ -23,12 +22,29 @@ namespace Communication.ModBus.Common
         public bool Connect();
 
         /// <summary>
+        /// 异步连接 ModBus 从站。
+        /// </summary>
+        /// <returns>是否成功连接。</returns>
+        public Task<bool> ConnectAsync();
+
+        /// <summary>
         /// 断开 ModBus 从站连接。
         /// </summary>
         public void Disconnect();
 
+        /// <summary>
+        /// 发送 ModBus 指令
+        /// </summary>
+        /// <param name="tx">ModBus 指令</param>
+        /// <returns>ModBus 指令的响应</returns>
         public Rx<byte[]> Request(Tx tx);
 
+        /// <summary>
+        /// 异步发送 ModBus 指令
+        /// </summary>
+        /// <param name="tx">ModBus 指令</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>ModBus 指令的响应</returns>
         public Task<Rx<byte[]>> RequestAsync(Tx tx, CancellationToken cancellationToken = default);
     }
 }

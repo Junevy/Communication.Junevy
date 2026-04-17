@@ -1,8 +1,8 @@
-using Communication.ModBus.Common;
+using Communication.ModBus.Core;
 using Communication.ModBus.ModBusRTU;
 using Communication.ModBus.ModBusTCP;
 
-namespace Communication.ModBus.Services
+namespace Communication.ModBus.Factory
 {
     /// <summary>
     /// ModBus 工厂接口，用于创建 ModBus 实例。

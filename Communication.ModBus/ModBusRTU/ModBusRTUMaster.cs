@@ -20,7 +20,6 @@ namespace Communication.ModBus.ModBusRTU
         /// <exception cref="ArgumentNullException">当配置参数为 null 时，抛出异常。</exception>
         public ModBusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
 
-
         public bool Connect()
         {
             ThrowIfDisposed();
@@ -42,6 +41,12 @@ namespace Communication.ModBus.ModBusRTU
                 return false;
             }
             return true;
+        }
+
+        public Task<bool> ConnectAsync()
+        {
+            // SerialPort doesn't have an async Open method, so we run it on a thread pool thread
+            return Task.Run(Connect);
         }
 
         private void InitialConnection()
@@ -86,7 +91,106 @@ namespace Communication.ModBus.ModBusRTU
 
         public Rx<byte[]> Request(Tx tx)
         {
-            return RequestAsync(tx).GetAwaiter().GetResult();
+            logger?.Information("Build Execute Tx: {@Tx}", tx);
+
+            if (!IsConnected)
+            {
+                logger?.Warning("Port not open: {Config.PortName}.", Config.PortName);
+                return Rx<byte[]>.Fail("Port not open");
+            }
+
+            if (!ModBusTools.CheckTx(tx))
+                return Rx<byte[]>.Fail("Invalid Tx.", tx.Data);
+
+            try
+            {
+                requestLock.Wait();
+                var sendResult = Send(tx);
+
+                if (!sendResult) return Rx<byte[]>.Fail("Send frame occured an error.");
+
+                return Read(tx);
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Execute request error!", ex);
+                return Rx<byte[]>.Fail(ex.Message);
+            }
+            finally
+            {
+                requestLock.Release();
+            }
+        }
+
+        private bool Send(Tx tx)
+        {
+            ThrowIfDisposed();
+
+            try
+            {
+                byte[] request = ModBusTools.BuildTxFrame(tx);
+
+                // 清除串口区缓存
+                this.serialPort.DiscardInBuffer();  
+                this.serialPort.DiscardOutBuffer();
+
+                this.serialPort.Write(request, 0, request.Length);
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                logger?.Error("Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                logger?.Error("Execute request error!", ex);
+                return false;
+            }
+        }
+
+        private Rx<byte[]> Read(Tx tx)
+        {
+            var buffer = new List<byte>(256);
+            var temp = new byte[256];
+
+            try
+            {
+                while (true)
+                {
+                    int count = 0;
+                    try
+                    {
+                        count = this.serialPort.Read(temp, 0, temp.Length);
+                    }
+                    catch (TimeoutException)
+                    {
+                        logger?.Error("Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
+                        return Rx<byte[]>.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
+                    }
+
+                    if (count <= 0) continue;
+
+                    buffer.AddRange(temp.AsSpan(0, count));
+
+                    // 尝试解析 Modbus 帧
+                    var parseResult = ModBusRxParser.ParseRx(buffer.ToArray(), tx);
+                    if (parseResult.IsSuccess)
+                    {
+                        logger?.Information("Try parse frame success: {@Rx.Data}", parseResult.Data);
+                        return Rx<byte[]>.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
+                    }
+
+                    // 等待读取完整的一帧
+                    logger?.Debug("Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
+                    Thread.Sleep(Config.IntervalTime);
+                }
+            }
+            catch (Exception e)
+            {
+                logger?.Error("Receive response error: {e.Message}", e.Message);
+                return Rx<byte[]>.Fail(e.ToString());
+            }
         }
 
         /// <summary>
