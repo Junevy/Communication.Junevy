@@ -1,4 +1,4 @@
-﻿namespace Communication.ModBus.Utils
+﻿namespace Communication.Modbus.Utils
 {
     /// <summary>
     /// CRC16算法的工具类，提供计算CRC16校验码的方法，以及获取CRC16校验码的高字节和低字节的方法。

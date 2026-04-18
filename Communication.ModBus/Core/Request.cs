@@ -1,9 +1,9 @@
-namespace Communication.ModBus.Core
+namespace Communication.Modbus.Core
 {
     /// <summary>
     /// ModBus 发送数据类，用于封装 ModBus 发送数据。
     /// </summary>
-    public class Tx
+    public class Request
     {
         /// <summary>
         /// 功能码改变事件。

@@ -1,6 +1,4 @@
-﻿using Communication.ModBus.Common;
-
-namespace Communication.ModBus.Common
+﻿namespace Communication.Modbus.Common
 {
    /// <summary>
    /// Logger class.

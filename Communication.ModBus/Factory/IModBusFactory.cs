@@ -1,8 +1,8 @@
-using Communication.ModBus.Core;
-using Communication.ModBus.ModbusTCP;
-using Communication.ModBus.ModbusRTU;
+using Communication.Modbus.Core;
+using Communication.Modbus.TCP;
+using Communication.Modbus.RTU;
 
-namespace Communication.ModBus.Factory
+namespace Communication.Modbus.Factory
 {
     /// <summary>
     /// ModBus 工厂接口，用于创建 ModBus 实例。
@@ -14,7 +14,7 @@ namespace Communication.ModBus.Factory
         /// </summary>
         /// <param name="config">配置。</param>
         /// <returns>ModBus 实例。</returns>
-        IModbus Create(ModBusTCPConfig config);
-        IModbus Create(ModBusRTUConfig config);
+        IModbus Create(ModbusTCPConfig config);
+        IModbus Create(ModbusRTUConfig config);
     }
 }

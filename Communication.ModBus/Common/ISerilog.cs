@@ -1,4 +1,4 @@
-﻿namespace Communication.ModBus.Common
+﻿namespace Communication.Modbus.Common
 {
     /// <summary>
     /// 用于注入ISerilog，推荐主程序使用 Adapter 模式注入ISerilog对象。

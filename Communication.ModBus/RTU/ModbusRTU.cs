@@ -1,11 +1,11 @@
-﻿using Communication.ModBus.Common;
-using Communication.ModBus.Utils;
-using Communication.ModBus.Core;
+﻿using Communication.Modbus.Common;
+using Communication.Modbus.Utils;
+using Communication.Modbus.Core;
 using System.IO.Ports;
 
-namespace Communication.ModBus.ModbusRTU
+namespace Communication.Modbus.RTU
 {
-    public sealed class ModBusRTU(ModBusRTUConfig config) : IModbus
+    public sealed class ModbusRTU(ModbusRTUConfig config) : IModbus
     {
         private bool disposed = false;
         private readonly ISerilog? logger = Serilogger.Instance;
@@ -18,7 +18,7 @@ namespace Communication.ModBus.ModbusRTU
         /// ModBus 配置参数。
         /// </summary>
         /// <exception cref="ArgumentNullException">当配置参数为 null 时，抛出异常。</exception>
-        public ModBusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
+        public ModbusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
 
         public bool Connect()
         {
@@ -89,32 +89,32 @@ namespace Communication.ModBus.ModbusRTU
             }
         }
 
-        public Rx Request(Tx tx)
+        public Response Request(Request tx)
         {
             logger?.Information("Build Execute Tx: {@Tx}", tx);
 
             if (!IsConnected)
             {
                 logger?.Warning("Port not open: {Config.PortName}.", Config.PortName);
-                return Rx.Fail("Port not open");
+                return Response.Fail("Port not open");
             }
 
             if (!ModBusTools.CheckTx(tx))
-                return Rx.Fail("Invalid Tx.", tx.Data);
+                return Response.Fail("Invalid Tx.", tx.Data);
 
             try
             {
                 requestLock.Wait();
                 var sendResult = Send(tx);
 
-                if (!sendResult) return Rx.Fail("Send frame occured an error.");
+                if (!sendResult) return Response.Fail("Send frame occured an error.");
 
                 return Read(tx);
             }
             catch (Exception ex)
             {
                 logger?.Error("Execute request error!", ex);
-                return Rx.Fail(ex.Message);
+                return Response.Fail(ex.Message);
             }
             finally
             {
@@ -122,7 +122,7 @@ namespace Communication.ModBus.ModbusRTU
             }
         }
 
-        private bool Send(Tx tx)
+        private bool Send(Request tx)
         {
             ThrowIfDisposed();
 
@@ -149,7 +149,7 @@ namespace Communication.ModBus.ModbusRTU
             }
         }
 
-        private Rx Read(Tx tx)
+        private Response Read(Request tx)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -166,7 +166,7 @@ namespace Communication.ModBus.ModbusRTU
                     catch (TimeoutException)
                     {
                         logger?.Error("Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
-                        return Rx.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
+                        return Response.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
                     }
 
                     if (count <= 0) continue;
@@ -178,7 +178,7 @@ namespace Communication.ModBus.ModbusRTU
                     if (parseResult.IsSuccess)
                     {
                         logger?.Information("Try parse frame success: {@Rx.Data}", parseResult.Data);
-                        return Rx.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
+                        return Response.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
                     }
 
                     // 等待读取完整的一帧
@@ -189,7 +189,7 @@ namespace Communication.ModBus.ModbusRTU
             catch (Exception e)
             {
                 logger?.Error("Receive response error: {e.Message}", e.Message);
-                return Rx.Fail(e.ToString());
+                return Response.Fail(e.ToString());
             }
         }
 
@@ -199,32 +199,32 @@ namespace Communication.ModBus.ModbusRTU
         /// <param name="tx">ModBus请求帧</param>
         /// <param name="token">取消令牌</param>
         /// <returns>执行结果</returns>
-        public async Task<Rx> RequestAsync(Tx tx, CancellationToken token = default)
+        public async Task<Response> RequestAsync(Request tx, CancellationToken token = default)
         {
             logger?.Information("Build Execute Tx: {@Tx}", tx);
 
             if (!IsConnected)
             {
                 logger?.Warning("Port not open: {Config.PortName}.", Config.PortName);
-                return Rx.Fail("Port not open");
+                return Response.Fail("Port not open");
             }
 
             if (!ModBusTools.CheckTx(tx))
-                return Rx.Fail("Invalid Tx.", tx.Data);
+                return Response.Fail("Invalid Tx.", tx.Data);
 
             try
             {
                 await requestLock.WaitAsync(token);
                 var sendResult = await SendAsync(tx, token);
 
-                if (!sendResult) return Rx.Fail("Send frame occured an error.");
+                if (!sendResult) return Response.Fail("Send frame occured an error.");
 
                 return await ReadAsync(tx, token);
             }
             catch (Exception ex)
             {
                 logger?.Error("Execute request error!", ex);
-                return Rx.Fail(ex.Message);
+                return Response.Fail(ex.Message);
             }
             finally
             {
@@ -238,7 +238,7 @@ namespace Communication.ModBus.ModbusRTU
         /// <param name="tx">ModBus请求帧</param>
         /// <param name="token">取消令牌</param>
         /// <returns>执行结果。</returns>
-        private async Task<bool> SendAsync(Tx tx, CancellationToken token = default)
+        private async Task<bool> SendAsync(Request tx, CancellationToken token = default)
         {
             ThrowIfDisposed();
 
@@ -278,7 +278,7 @@ namespace Communication.ModBus.ModbusRTU
         /// <param name="tx">ModBus请求帧</param>
         /// <param name="token">取消令牌</param>
         /// <returns>执行结果</returns>
-        private async Task<Rx> ReadAsync(Tx tx, CancellationToken token = default)
+        private async Task<Response> ReadAsync(Request tx, CancellationToken token = default)
         {
             var buffer = new List<byte>(256);
             var temp = new byte[256];
@@ -298,7 +298,7 @@ namespace Communication.ModBus.ModbusRTU
                     catch (TimeoutException)
                     {
                         logger?.Error("Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
-                        return Rx.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
+                        return Response.Fail($"Read savle timeout: ({Config.ReadTimeOut}ms)");
                     }
 
                     if (count <= 0) continue;
@@ -310,7 +310,7 @@ namespace Communication.ModBus.ModbusRTU
                     if (parseResult.IsSuccess)
                     {
                         logger?.Information("Try parse frame success: {@Rx.Data}", parseResult.Data);
-                        return Rx.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
+                        return Response.Success(parseResult.Data ?? throw new InvalidOperationException("Parse frame failed."));
                     }
 
                     // 等待读取完整的一帧
@@ -321,12 +321,12 @@ namespace Communication.ModBus.ModbusRTU
             catch (OperationCanceledException oex)
             {
                 logger?.Error("Receive response error: {oex.Message}", oex.Message);
-                return Rx.Fail(oex.ToString());
+                return Response.Fail(oex.ToString());
             }
             catch (Exception e)
             {
                 logger?.Error("Receive response error: {e.Message}", e.Message);
-                return Rx.Fail(e.ToString());
+                return Response.Fail(e.ToString());
             }
         }
 

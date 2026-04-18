@@ -1,4 +1,4 @@
-using Communication.ModBus.Common;
+using Communication.Modbus.Common;
 
 namespace Communication.Test
 {

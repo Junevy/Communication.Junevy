@@ -1,13 +1,13 @@
-﻿using Communication.ModBus.Core;
+﻿using Communication.Modbus.Core;
 
-namespace Communication.ModBus.Utils
+namespace Communication.Modbus.Utils
 {
     public static class ModBusTools
     {
         public const int MODBUS_PORT = 502;
         // public static readonly byte[] MODBUS_MBAP_HEADER = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
-        public static bool CheckTx(Tx tx)
+        public static bool CheckTx(Request tx)
         {
             if (tx.Start < 0 || tx.Start > 0xFFFF
                 || tx.Length < 0
@@ -34,7 +34,7 @@ namespace Communication.ModBus.Utils
         /// <param name="tx">ModBus发送请求帧对象</param>
         /// <returns>ModBus发送帧</returns>
         /// <exception cref="InvalidDataException">当Tx无效时抛出异常</exception>
-        public static byte[] BuildTxFrame(Tx tx)
+        public static byte[] BuildTxFrame(Request tx)
         {
             if (!CheckTx(tx))
                 throw new InvalidDataException("Invalid Tx.");
@@ -47,7 +47,7 @@ namespace Communication.ModBus.Utils
                 throw new InvalidDataException("The protocol is not supported.");
         }
 
-        private static byte[] BuildRTUTxFrame(Tx tx)
+        private static byte[] BuildRTUTxFrame(Request tx)
         {
             List<byte> frame;
 
@@ -101,7 +101,7 @@ namespace Communication.ModBus.Utils
             return [.. frame];
         }
 
-        private static byte[] BuildTCPTxFrame(Tx tx)
+        private static byte[] BuildTCPTxFrame(Request tx)
         {
             var baseFrame = BuildRTUTxFrame(tx);
             tx.ByteCount = (ushort) (baseFrame.Length - 2);

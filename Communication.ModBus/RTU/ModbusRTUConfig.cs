@@ -1,8 +1,8 @@
 ﻿using System.IO.Ports;
 
-namespace Communication.ModBus.ModbusRTU
+namespace Communication.Modbus.RTU
 {
-    public class ModBusRTUConfig
+    public class ModbusRTUConfig
     {
         /// <summary>
         /// 串口名称。

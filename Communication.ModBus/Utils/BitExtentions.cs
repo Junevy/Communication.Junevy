@@ -1,4 +1,4 @@
-﻿namespace Communication.ModBus.Utils
+﻿namespace Communication.Modbus.Utils
 {
     /// <summary>
     /// Ushort类型的工具类，提供将ushort转换为字节数组的方法，以及从字节数组转换回ushort的方法。

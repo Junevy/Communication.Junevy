@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
 	  <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	  <!-- NuGet 包信息 -->
-	  <PackageId>Communication.ModBus</PackageId>
+	  <PackageId>Communication.Modbus</PackageId>
 	  <Version>1.0.0</Version>
 	  <Authors>Junevy</Authors>
 	  <Company>Junevy</Company>

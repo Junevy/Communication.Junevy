@@ -1,6 +1,6 @@
-namespace Communication.ModBus.ModbusTCP
+namespace Communication.Modbus.TCP
 {
-    public class ModBusTCPConfig
+    public class ModbusTCPConfig
     {
         public string Address {get; set;} = "127.0.0.1";
 

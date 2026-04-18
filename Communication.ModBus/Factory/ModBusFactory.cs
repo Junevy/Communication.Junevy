@@ -1,23 +1,23 @@
-using Communication.ModBus.Core;
-using Communication.ModBus.ModbusRTU;
-using Communication.ModBus.ModbusTCP;
+using Communication.Modbus.Core;
+using Communication.Modbus.RTU;
+using Communication.Modbus.TCP;
 
-namespace Communication.ModBus.Factory
+namespace Communication.Modbus.Factory
 {
     /// <summary>
     /// ModBus 工厂，用于创建 ModBus 实例。
     /// </summary>
-    public class ModbusFactory : IModbusFactory
+    public sealed class ModbusFactory : IModbusFactory
     {
-        public IModbus Create(ModBusTCPConfig config)
+        public IModbus Create(ModbusTCPConfig config)
         {
-            ModBusTCP socket = new(config);
+            ModbusTCP socket = new(config);
             return socket;
         }
 
-        public IModbus Create(ModBusRTUConfig config)
+        public IModbus Create(ModbusRTUConfig config)
         {
-            ModBusRTU serialPort = new(config);
+            ModbusRTU serialPort = new(config);
             return serialPort;
         }
     }

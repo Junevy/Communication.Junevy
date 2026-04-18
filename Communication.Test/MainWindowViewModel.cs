@@ -1,20 +1,20 @@
-﻿using Communication.ModBus.Core;
-using Communication.ModBus.Common;
-using Communication.ModBus.ModbusRTU;
-using Communication.ModBus.Utils;
+﻿using Communication.Modbus.Core;
+using Communication.Modbus.Common;
+using Communication.Modbus.RTU;
+using Communication.Modbus.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO.Ports;
 using System.Windows;
-using Communication.ModBus.ModbusTCP;
-using Communication.ModBus.Factory;
+using Communication.Modbus.TCP;
+using Communication.Modbus.Factory;
 
 namespace Communication.Test
 {
     public partial class MainWindowViewModel : ObservableObject
     {
-        private readonly ModBusRTU mr;
+        private readonly ModbusRTU mr;
         private IModbus tcp;
         
         private bool isConnected = false;
@@ -38,15 +38,15 @@ namespace Communication.Test
         public int[] BaudRates { get; private set; } = [9600, 19200, 38400, 57600, 115200];
         #endregion
 
-        public ModBusRTUConfig Config { get; set; } = new();
-        public Tx Tx { get; set; } = new();
+        public ModbusRTUConfig Config { get; set; } = new();
+        public Request Tx { get; set; } = new();
 
         public MainWindowViewModel()
         {
             Logger log = new();
             Serilogger.SetInstance(log);
 
-            this.mr = new ModBusRTU(Config);
+            this.mr = new ModbusRTU(Config);
 
             // 监听功能码变化, 对应DataGrid的变化
             Tx.OnFunctionCodeChanged += (f) =>
@@ -89,7 +89,7 @@ namespace Communication.Test
 
             // mr.Connect();
             ModbusFactory factory = new();
-            this.tcp = factory.Create(new ModBusTCPConfig());
+            this.tcp = factory.Create(new ModbusTCPConfig());
             _ = tcp.Connect();
         }
 
@@ -97,7 +97,7 @@ namespace Communication.Test
         public async Task ExecuteAsync()
         {
             
-            Tx tx = new Tx();
+            Request tx = new Request();
 
             // byte[] test = [0x01];
             // ushort test = 

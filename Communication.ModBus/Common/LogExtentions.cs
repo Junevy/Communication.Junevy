@@ -1,7 +1,7 @@
-﻿using Communication.ModBus.Common;
+﻿using Communication.Modbus.Common;
 using System.Diagnostics;
 
-namespace Communication.ModBus.Common
+namespace Communication.Modbus.Common
 {
     public static class LogExtentions
     {
