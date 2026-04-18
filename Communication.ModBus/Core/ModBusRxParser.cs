@@ -18,59 +18,37 @@ namespace Communication.Modbus.Core
             if (response == null)
                 return Response.Fail("The response is null.");
 
-            bool extractResult;
-            byte[] extractFrame;
-            byte[] pdu = [];
+            bool verifiedResult;
+            byte[] frame;
+            byte[] pdu;
 
+            // 提取帧
             if (tx.ProtocolType == ModbusProtocolType.TCP)
-            {
-                extractResult = TryExtractTcpRx(response, tx.SlaveId, tx.FunctionCode, out extractFrame);
-                pdu = (byte[])extractFrame.Clone();
-                extractFrame = extractFrame.Skip(6).ToArray();
-            }
+                verifiedResult = TryExtractTcpRx(response, tx.SlaveId, tx.FunctionCode, out frame);
             else
-                extractResult = TryExtractRtuRx(response.ToList(), tx.SlaveId, tx.FunctionCode, out extractFrame);
+                verifiedResult = TryExtractRtuRx(response.ToList(), tx.SlaveId, tx.FunctionCode, out frame);
 
-            if (!extractResult)
+            if (!verifiedResult)
             {
-                logger?.Error("Extract frame failed: {@extractFrame}", extractFrame);
-                return Response.Fail("Extract frame failed", extractFrame);
+                logger?.Error("Extract frame failed: {@extractFrame}", frame);
+                return Response.Fail("Extract frame failed", response);
             }
+
+            // 提取成功,保存提取后数据
+            if (tx.ProtocolType == ModbusProtocolType.TCP)
+                pdu = frame.Skip(6).ToArray();
+            else
+                pdu = frame.ToArray();
 
             var result = (byte)tx.FunctionCode switch
             {
-                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Length, tx.ProtocolType),
-                0x05 or 0x06 => VerifyEchoRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Data, tx.ProtocolType),
-                0x0F or 0x10 => VerifyMultiWriteRx(extractFrame, tx.SlaveId, tx.FunctionCode, tx.Start, tx.Length, tx.ProtocolType),
-                _ => Response.Fail("The function code not support.", response),
+                0x01 or 0x02 or 0x03 or 0x04 => VerifyReadRx(pdu, tx.SlaveId, tx.FunctionCode, tx.Length, tx.ProtocolType),
+                0x05 or 0x06 => VerifyEchoRx(pdu, tx.SlaveId, tx.FunctionCode, tx.Data, tx.ProtocolType),
+                0x0F or 0x10 => VerifyMultiWriteRx(pdu, tx.SlaveId, tx.FunctionCode, tx.Start, tx.Length, tx.ProtocolType),
+                _ => Response.Fail("The function code not support.", frame),
             };
-
-            if (result.IsSuccess)
-            {
-                result.Data = pdu;
-                return result;
-            }
-            else return result;
-        }
-
-        /// <summary>
-        /// 自动检测 ModBus 协议类型
-        /// </summary>
-        /// <param name="response">ModBus 响应数据</param>
-        /// <returns>检测到的协议类型</returns>
-        public static ModbusProtocolType DetectProtocolType(byte[] response)
-        {
-            if (response != null && response.Length >= 7)
-            {
-                if (response[2] == 0x00 && response[3] == 0x00)
-                {
-                    var uLength = BitExtentions.ToUshort(response[5], response[4]);
-
-                    if (uLength == response.Length)
-                        return ModbusProtocolType.TCP;
-                }
-            }
-            return ModbusProtocolType.RTU;
+            result.RawData = frame;
+            return result;  
         }
 
         /// <summary>
@@ -88,6 +66,13 @@ namespace Communication.Modbus.Core
             byte byteCount = response[2];   // 字节计数
             int expectedLength = protocolType == ModbusProtocolType.TCP ? 3 + byteCount : 3 + byteCount + 2;    // 根据字节计数计算的帧长度
             string comName = protocolType == ModbusProtocolType.TCP ? "TCP" : "SerialPort"; // 协议名称，记录log使用
+            byte functionCodeByte = response[1];
+
+            if (functionCodeByte != (byte)functionCode)
+            {
+                logger?.Error("The function code error : {functionCode}, actual {actualCode}", functionCode, functionCodeByte);
+                return Response.Fail($"The function code error : {functionCode}, actual : {functionCodeByte}.", response);
+            }
 
             if (functionCode == ModbusFunctionCode.ReadHodingRegisters || functionCode == ModbusFunctionCode.ReadInputRegisters)
                 expectedByteCount = length * 2;
@@ -240,57 +225,38 @@ namespace Communication.Modbus.Core
         private static bool TryExtractTcpRx(byte[] buffer, byte slaveID, ModbusFunctionCode functionCode, out byte[] frame)
         {
             frame = buffer;
-
-            if (buffer.Length < 8)
+            if (buffer.Length < ModbusParams.TCP_RESPONSE_MINIMUM_LENGTH)
+            {
+                logger?.Warning("The response is not valid : {@buffer}", buffer);
                 return false;
+            }
 
             // 解析 MBAP 头
             ushort protocolId = BitExtentions.ToUshort(buffer[3], buffer[2]);   //协议标识
             ushort length = BitExtentions.ToUshort(buffer[5], buffer[4]);   // 字节计数
-            byte unitId = buffer[6];   // 从站ID
+            byte unitId = buffer[ModbusParams.TCP_DATA_START];   // 从站ID
 
-            if (protocolId != 0x0000)   // 验证协议ID（ModbusTCP 协议ID为0x0000）
+            if (protocolId != ModbusParams.TCP_PROTOCOL_ID)   // 验证协议ID（ModbusTCP 协议ID为0x0000）
             {
-                logger?.Warning("Invalid protocol ID: {protocolId}, remove first byte and continue.", protocolId);
+                logger?.Warning("Invalid protocol ID: {protocolId}, and buffer : {@buffer}", protocolId, buffer);
                 return false;
             }
 
             if (unitId != slaveID)  // 验证从站ID
-            {
-                logger?.Warning("The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, remove first byte and continue.", unitId, slaveID);
-                // return false;
-            }
+                logger?.Warning("The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, and buffer : {@buffer}", unitId, slaveID, buffer);
 
             // 计算完整报文长度（MBAP头 + 数据部分）
-            int totalLength = 6 + length;
+            int totalLength = ModbusParams.TCP_DATA_START + length;
             if (buffer.Length != totalLength)
+            {
+                logger?.Warning("Invalid response length. Actual {buffer.Length}, expected {totalLength}, and buffer : {@buffer}", buffer.Length, totalLength, buffer);
                 return false;
+            }
 
             var candidate = buffer.Take(totalLength).ToArray(); // 提取完整报文
             logger?.Rx("TCP", candidate);
-
-            byte funcCode = candidate[7];
-            if (funcCode == ((byte)functionCode | 0x80))  // 异常响应
-            {
-                if (length != 3)  // 异常响应的长度应该是 3 字节（从站ID + 功能码 + 异常码）
-                {
-                    logger?.Warning("Invalid exception response length: {length}, remove first byte and continue.", length);
-                    return false;
-                }
-
-                frame = candidate;
-                return true;
-            }
-
-            if (funcCode == (byte)functionCode)  // 正常响应
-            {
-                frame = candidate;
-                return true;
-            }
-
-            // 功能码不匹配
-            logger?.Warning("Function code mismatch. Actual {funcCode}, expected {functionCode}, remove first byte and continue.", funcCode, functionCode);
-            return false;
+            frame = candidate;
+            return true;
         }
 
         /// <summary>
@@ -303,15 +269,18 @@ namespace Communication.Modbus.Core
         /// <returns>是否成功提取</returns>
         private static bool TryExtractRtuRx(List<byte> buffer, byte slaveID, ModbusFunctionCode functionCode, out byte[] frame)
         {
-            frame = [];
+            frame = buffer.ToArray();
 
-            if (buffer.Count < 5)
-                return false;
-
-            while (buffer.Count >= 5)
+            if (buffer.Count < ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
             {
-                byte id = buffer[0];
-                byte funcCode = buffer[1];
+                logger?.Warning("The response is not valid : {@buffer}", buffer);
+                return false;
+            }
+
+            while (buffer.Count >= ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
+            {
+                var id = buffer[0];
+                var funcCode = buffer[1];
 
                 if (id != slaveID)
                 {
@@ -327,7 +296,7 @@ namespace Communication.Modbus.Core
 
                     if (exceptionLength > buffer.Count)
                     {
-                        logger?.Error("The exception response length is not matched. Actual {length}, expected {expectedLength} and return false.", buffer.Count, exceptionLength);
+                        logger?.Error("The exception response length is not matched. Actual {length}, expected {expectedLength} and buffer : {@buffer}", buffer.Count, exceptionLength, buffer);
                         return false;
                     }
 
@@ -356,7 +325,10 @@ namespace Communication.Modbus.Core
                     var expectedLength = 3 + byteCount + 2;
 
                     if (buffer.Count < expectedLength)
+                    {
+                        logger?.Warning("The response is not valid : {@buffer}", buffer);
                         return false;
+                    }
 
                     var candidate = buffer.Take(expectedLength).ToArray();
                     logger?.Rx("SerialPort", candidate);
@@ -383,7 +355,36 @@ namespace Communication.Modbus.Core
                     var expectedLength = 8;
 
                     if (expectedLength > buffer.Count)
+                    {
+                        logger?.Warning("The response is not valid : {@buffer}", buffer);
                         return false;
+                    }
+
+                    var candidate = buffer.Take(expectedLength).ToArray();
+                    logger?.Rx("SerialPort", candidate);
+
+                    if (CRC16.ValidateCRC(candidate))
+                    {
+                        buffer.RemoveRange(0, expectedLength);
+                        frame = candidate;
+                        return true;
+                    }
+
+                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate[4], candidate[3]);
+                    buffer.RemoveAt(0);
+                    continue;
+                }
+
+                // 其他功能码，例如 0x06， 0x0F， 0x10， 0x11等
+                if (id == slaveID && (byte)functionCode == funcCode)
+                {
+                    var expectedLength = 6;
+
+                    if (expectedLength > buffer.Count)
+                    {
+                        logger?.Warning("The response is not valid : {@buffer}", buffer);
+                        return false;
+                    }
 
                     var candidate = buffer.Take(expectedLength).ToArray();
                     logger?.Rx("SerialPort", candidate);
@@ -401,16 +402,12 @@ namespace Communication.Modbus.Core
                 }
 
                 // 当ID匹配，但是功能码不匹配时，其实这部分还能有点补充，例如 0x07， 0x08， 0x14， 0x15等
-
                 logger?.Warning("Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", buffer);
                 buffer.RemoveAt(0);
                 continue;
             }
 
-            if (buffer.Count > 1024)
-                buffer.RemoveRange(0, buffer.Count - 256);
-
-            logger?.Error("The Rx match failed {@Buffer}", buffer);
+            logger?.Error("The Rx match failed {@buffer}", buffer);
             return false;
         }
     }

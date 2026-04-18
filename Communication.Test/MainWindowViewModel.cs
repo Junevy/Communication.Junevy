@@ -9,6 +9,7 @@ using System.IO.Ports;
 using System.Windows;
 using Communication.Modbus.TCP;
 using Communication.Modbus.Factory;
+using Communication.Modbus.Extensions;
 
 namespace Communication.Test
 {
@@ -89,23 +90,27 @@ namespace Communication.Test
 
             // mr.Connect();
             ModbusFactory factory = new();
-            this.tcp = factory.Create(new ModbusTCPConfig());
-            _ = tcp.Connect();
+            var result = factory.TryAddModbus(out tcp, new ModbusTCPConfig(), "test");
+            if (result)
+                _ = tcp.Connect();
         }
 
         [RelayCommand]
         public async Task ExecuteAsync()
         {
+
+            var r = tcp.ReadCoils(1,0,4);
+            Console.Write(r);
             
-            Request tx = new Request();
+            // Request tx = new Request();
 
             // byte[] test = [0x01];
             // ushort test = 
-            tx.Data = [1, 2, 132];
+            // tx.Data = [1, 2, 132];
 
-            var result = await tcp.RequestAsync(tx);
+            // var result = await tcp.RequestAsync(tx);
 
-            Console.Write(result);
+            // Console.Write(result);
             // if (!ProcessTxData(out byte[] txData))
             //     return;
 

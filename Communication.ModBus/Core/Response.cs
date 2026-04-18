@@ -11,10 +11,13 @@
         public bool IsSuccess { get; set; }
 
         /// <summary>
-        /// 响应数据。
+        /// 响应原始数据
         /// </summary>
         public byte[]? Data { get; set; }
 
+        /// <summary>
+        /// 解析后的响应数据
+        /// </summary>
         public byte[]? RawData { get; set; }
         
         /// <summary>
@@ -32,7 +35,8 @@
         /// </summary>
         /// <param name="data">响应数据。</param>
         /// <returns>成功响应对象。</returns>
-        public static Response Success(byte[] data) => new() { IsSuccess = true, Data = data };
+        /// <param name="rawData">原始响应数据。</param>
+        public static Response Success(byte[] data, byte[]? rawData = default) => new() { IsSuccess = true, Data = data, RawData = rawData };
         
         /// <summary>
         /// 失败响应。

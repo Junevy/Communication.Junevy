@@ -26,8 +26,12 @@ namespace Communication.Modbus.Factory
 
         public bool TryAddModbus(out IModbus? socket, ModbusTCPConfig config, string? key = null)
         {
-            socket = default;
-            var result = modbusList.TryAdd(key ?? config.Address, new ModbusTCP(config));
+            var tcp = new ModbusTCP(config);
+            var result = modbusList.TryAdd(key ?? config.Address, tcp);
+            if (result)
+                socket = tcp;
+            else
+                throw new Exception("The Modbus TCP instance already exists!");
             return result;
         }
 
@@ -35,6 +39,13 @@ namespace Communication.Modbus.Factory
         {
             socket = default;
             var result = modbusList.TryAdd(key ?? config.PortName, new ModbusRTU(config));
+            return result;
+        }
+
+        public bool TryRemoveModbus(string key)
+        {
+            var result = modbusList.TryRemove(key, out var mb);
+            if (result) mb?.Dispose();
             return result;
         }
     }

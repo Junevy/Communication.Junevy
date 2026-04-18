@@ -25,7 +25,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return modBus.Request(tx);
+            var result = modBus.Request(tx);
+            if (result.IsSuccess && result.Data != null)
+            {
+                var b = ModbusTools.ParseCoils(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -51,7 +58,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            if (result.IsSuccess && result.Data != null)
+            {
+                var b = ModbusTools.ParseCoils(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -71,7 +85,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return modBus.Request(tx);
+            var result = modBus.Request(tx);
+            if (result.IsSuccess && result.Data != null)
+            {
+                var b = ModbusTools.ParseCoils(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -97,7 +118,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            if (result.IsSuccess && result.Data != null)
+            {
+                var b = ModbusTools.ParseCoils(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -117,7 +145,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return modBus.Request(tx);
+            var result = modBus.Request(tx);
+            if (result.IsSuccess && result.Data != null)
+            {
+                result.Data = ModbusTools.ParseRegisters(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -143,7 +178,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            if (result.IsSuccess && result.Data != null)
+            {
+                result.Data = ModbusTools.ParseRegisters(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -163,7 +205,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return modBus.Request(tx);
+            var result = modBus.Request(tx);
+            if (result.IsSuccess && result.Data != null)
+            {
+                result.Data = ModbusTools.ParseRegisters(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -189,7 +238,14 @@ namespace Communication.Modbus.Extensions
                 Length = length
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            if (result.IsSuccess && result.Data != null)
+            {
+                result.Data = ModbusTools.ParseRegisters(result.Data, length);
+                return result;
+            }
+
+            return result;
         }
 
         /// <summary>

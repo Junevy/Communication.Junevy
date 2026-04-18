@@ -102,10 +102,10 @@ namespace Communication.Modbus.Utils
         private static byte[] BuildTCPTxFrame(Request tx)
         {
             var baseFrame = BuildRTUTxFrame(tx);
-            tx.ByteCount = (ushort) (baseFrame.Length - 2);
+            tx.ByteCount = (ushort)(baseFrame.Length - 2);
             var transactionId = (ushort)(tx.TransactionId + 0x01);
 
-            List<byte> frame = 
+            List<byte> frame =
             [
                 .. BitExtentions.ToBytesByBigEndian(transactionId),
                 0x00,
@@ -123,16 +123,26 @@ namespace Communication.Modbus.Utils
         /// <param name="rx">ModBus接收帧</param>
         /// <param name="length">读取线圈数量</param>
         /// <returns>读取到的线圈数据</returns>
-        public static ushort[] ParseCoils(byte[] rx, int length)
+        public static bool[] ParseCoils(byte[] rx, int length)
         {
-            ushort[] result = new ushort[length];
+            if (rx == null)
+                throw new ArgumentNullException(nameof(rx), "The rx data cannot be null.");
 
-            for (ushort i = 0; i < length; i++)
+            if (length <= 0)
+                throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
+
+            int expectedByteCount = (length + 7) / 8;
+            if (rx.Length < ModbusParams.RTU_DATA_START + expectedByteCount)
+                throw new ArgumentException("The rx data is not enough for the requested length.", nameof(rx));
+
+            bool[] result = new bool[length];
+
+            for (int i = 0; i < length; i++)
             {
                 var byteIndex = i / 8;
                 var bitIndex = i % 8;
 
-                result[i] = (ushort)((rx[3 + byteIndex] >> bitIndex) & 1);
+                result[i] = ((rx[ModbusParams.RTU_DATA_START + byteIndex] >> bitIndex) & 1) == 1;
             }
 
             return result;
@@ -144,14 +154,14 @@ namespace Communication.Modbus.Utils
         /// <param name="rx">ModBus接收帧</param>
         /// <param name="length">读取寄存器数量</param>
         /// <returns>读取到的寄存器数据</returns>
-        public static ushort[] ParseRegisters(byte[] rx, ushort length)
+        public static byte[] ParseRegisters(byte[] rx, ushort length)
         {
-            ushort[] result = new ushort[length];
+            byte[] result = new byte[length];
 
             for (int i = 0; i < length; i++)
             {
-                var index = 3 + i * 2;
-                result[i] = (ushort)((rx[index] << 8) | rx[index + 1]);
+                var index = ModbusParams.RTU_DATA_START + i * 2;
+                result[i] = (byte)((rx[index] << 8) | rx[index + 1]);
             }
             return result;
         }
