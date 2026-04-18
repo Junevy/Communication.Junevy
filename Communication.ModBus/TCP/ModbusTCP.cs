@@ -8,7 +8,7 @@ namespace Communication.Modbus.TCP
     public sealed class ModbusTCP : IModbus
     {
         private readonly Socket socket;
-        private const int MbapHeaderLength = 6;
+        //private const int MbapHeaderLength = 6;
         private readonly ISerilog? logger = Serilogger.Instance;
         private readonly SemaphoreSlim requestLock = new(1, 1);
         public ModbusTCPConfig Config { get; private set; }
@@ -24,7 +24,7 @@ namespace Communication.Modbus.TCP
 
         public bool Connect()
         {
-            if (!ModBusTools.ValidateAddress(Config.Address) || !ModBusTools.ValidatePort(Config.Port))
+            if (!ModbusTools.ValidateAddress(Config.Address) || !ModbusTools.ValidatePort(Config.Port))
                 return false;
 
             if (CheckConnection()) Disconnect();
@@ -54,7 +54,7 @@ namespace Communication.Modbus.TCP
 
         public async Task<bool> ConnectAsync()
         {
-            if (!ModBusTools.ValidateAddress(Config.Address) || !ModBusTools.ValidatePort(Config.Port))
+            if (!ModbusTools.ValidateAddress(Config.Address) || !ModbusTools.ValidatePort(Config.Port))
                 return false;
 
             if (CheckConnection()) Disconnect();
@@ -95,7 +95,7 @@ namespace Communication.Modbus.TCP
             if (!CheckConnection())
                 return Response.Fail("Not connected.");
 
-            if (!ModBusTools.CheckTx(tx))
+            if (!ModbusTools.CheckTx(tx))
                 return Response.Fail("Invalid Tx.");
 
             requestLock.Wait();
@@ -123,7 +123,7 @@ namespace Communication.Modbus.TCP
         {
             try
             {
-                var frame = ModBusTools.BuildTxFrame(tx);
+                var frame = ModbusTools.BuildTxFrame(tx);
                 
                 socket.SendTimeout = Config.WriteTimeOut;
                 int totalSent = 0;
@@ -155,8 +155,8 @@ namespace Communication.Modbus.TCP
                 socket.ReceiveTimeout = Config.ReadTimeOut;
 
                 // Read MBAP Header
-                var mbapHeaderArray = new byte[MbapHeaderLength];
-                var mbapHeader = ReadExact(mbapHeaderArray, MbapHeaderLength);
+                var mbapHeaderArray = new byte[ModbusParams.TCP_DATA_START];
+                var mbapHeader = ReadExact(mbapHeaderArray, ModbusParams.TCP_DATA_START);
 
                 ushort remainder = (ushort)(mbapHeader[4] << 8 | mbapHeader[5]);
                 
@@ -199,7 +199,7 @@ namespace Communication.Modbus.TCP
             if (!CheckConnection())
                 return Response.Fail("Not connected.");
 
-            if (!ModBusTools.CheckTx(tx))
+            if (!ModbusTools.CheckTx(tx))
                 return Response.Fail("Invalid Tx.");
 
             await requestLock.WaitAsync(cancellationToken);
@@ -232,7 +232,7 @@ namespace Communication.Modbus.TCP
         {
             try
             {
-                var frame = ModBusTools.BuildTxFrame(tx);
+                var frame = ModbusTools.BuildTxFrame(tx);
 
                 using var sendTimeoutToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 sendTimeoutToken.CancelAfter(Config.WriteTimeOut);
@@ -272,8 +272,8 @@ namespace Communication.Modbus.TCP
                 receiveTimeoutToken.Token.ThrowIfCancellationRequested();
 
                 // Read MBAP Header
-                var MbapHeaderArray = new byte[MbapHeaderLength];
-                var mbapHeaer = await ReadExactAsync(MbapHeaderArray, MbapHeaderLength, receiveTimeoutToken.Token);
+                var MbapHeaderArray = new byte[ModbusParams.TCP_DATA_START];
+                var mbapHeaer = await ReadExactAsync(MbapHeaderArray, ModbusParams.TCP_DATA_START, receiveTimeoutToken.Token);
 
                 ushort remiander = (ushort)(mbapHeaer[4] << 8 | mbapHeaer[5]);
                 

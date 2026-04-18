@@ -99,7 +99,7 @@ namespace Communication.Modbus.RTU
                 return Response.Fail("Port not open");
             }
 
-            if (!ModBusTools.CheckTx(tx))
+            if (!ModbusTools.CheckTx(tx))
                 return Response.Fail("Invalid Tx.", tx.Data);
 
             try
@@ -128,7 +128,7 @@ namespace Communication.Modbus.RTU
 
             try
             {
-                byte[] request = ModBusTools.BuildTxFrame(tx);
+                byte[] request = ModbusTools.BuildTxFrame(tx);
 
                 // 清除串口区缓存
                 this.serialPort.DiscardInBuffer();  
@@ -209,7 +209,7 @@ namespace Communication.Modbus.RTU
                 return Response.Fail("Port not open");
             }
 
-            if (!ModBusTools.CheckTx(tx))
+            if (!ModbusTools.CheckTx(tx))
                 return Response.Fail("Invalid Tx.", tx.Data);
 
             try
@@ -244,7 +244,7 @@ namespace Communication.Modbus.RTU
 
             try
             {
-                byte[] request = ModBusTools.BuildTxFrame(tx);
+                byte[] request = ModbusTools.BuildTxFrame(tx);
 
                 token.ThrowIfCancellationRequested();
                 // 清除串口区缓存

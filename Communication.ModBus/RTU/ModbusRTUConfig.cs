@@ -1,4 +1,5 @@
-﻿using System.IO.Ports;
+﻿using Communication.Modbus.Core;
+using System.IO.Ports;
 
 namespace Communication.Modbus.RTU
 {
@@ -7,7 +8,7 @@ namespace Communication.Modbus.RTU
         /// <summary>
         /// 串口名称。
         /// </summary>
-        public string PortName { get; set; } = "COM1";
+        public string PortName { get; set; } = "COM1" ?? throw new ArgumentNullException(nameof(PortName));
         
         /// <summary>
         /// 波特率。
@@ -38,26 +39,26 @@ namespace Communication.Modbus.RTU
         /// 是否启用 RTS。
         /// </summary>
         public bool RtsEnable { get; set;} = false;
-        
+
         /// <summary>
         /// 写超时时间。
         /// </summary>
-        public int WriteTimeOut { get; set; } = 2000;
-        
+        public int WriteTimeOut { get; set; } = ModbusParams.WRITE_TIMEOUT;
+
         /// <summary>
         /// 读超时时间。
         /// </summary>
-        public int ReadTimeOut { get; set; } = 2000;
-        
+        public int ReadTimeOut { get; set; } = ModbusParams.READ_TIMEOUT;
+
         /// <summary>
         /// 重试次数。
         /// </summary>
-        public int RetryCount { get; set; } = 0;
-        
+        public int RetryCount { get; set; } = ModbusParams.RETRY_COUNT;
+
         /// <summary>
         /// 等待报文Rx间隔时间。
         /// </summary>
-        public int IntervalTime { get; set; } = 25;
+        public int IntervalTime { get; set; } = ModbusParams.INTERVAL_TIME;
 
     }
 }

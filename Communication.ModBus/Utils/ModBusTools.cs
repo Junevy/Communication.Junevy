@@ -2,11 +2,8 @@
 
 namespace Communication.Modbus.Utils
 {
-    public static class ModBusTools
+    public static class ModbusTools
     {
-        public const int MODBUS_PORT = 502;
-        // public static readonly byte[] MODBUS_MBAP_HEADER = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-
         public static bool CheckTx(Request tx)
         {
             if (tx.Start < 0 || tx.Start > 0xFFFF
@@ -101,6 +98,7 @@ namespace Communication.Modbus.Utils
             return [.. frame];
         }
 
+
         private static byte[] BuildTCPTxFrame(Request tx)
         {
             var baseFrame = BuildRTUTxFrame(tx);
@@ -168,7 +166,7 @@ namespace Communication.Modbus.Utils
 
         public static bool ValidatePort(int port)
         {
-            if (port == MODBUS_PORT) return true;
+            if (port == ModbusParams.TCP_PORT) return true;
 
             if (port <= 1024 || port > 65535)
                 return false;
