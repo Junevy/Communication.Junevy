@@ -1,10 +1,12 @@
-﻿using Communication.Modbus.Core;
+﻿using System.Buffers;
+using System.Buffers.Binary;
+using Communication.Modbus.Core;
 
 namespace Communication.Modbus.Utils
 {
     public static class ModbusTools
     {
-        public static bool CheckTx(Request tx)
+        public static bool CheckTx(ModbusTx tx)
         {
             if (tx.Start < 0 || tx.Start > 0xFFFF
                 || tx.Length < 0
@@ -31,7 +33,7 @@ namespace Communication.Modbus.Utils
         /// <param name="tx">ModBus发送请求帧对象</param>
         /// <returns>ModBus发送帧</returns>
         /// <exception cref="InvalidDataException">当Tx无效时抛出异常</exception>
-        public static byte[] BuildTxFrame(Request tx)
+        public static byte[] BuildTxFrame(ModbusTx tx)
         {
             if (!CheckTx(tx))
                 throw new InvalidDataException("Invalid Tx.");
@@ -44,7 +46,7 @@ namespace Communication.Modbus.Utils
                 throw new InvalidDataException("The protocol is not supported.");
         }
 
-        private static byte[] BuildRTUTxFrame(Request tx)
+        private static byte[] BuildRTUTxFrame(ModbusTx tx)
         {
             List<byte> frame;
 
@@ -99,7 +101,7 @@ namespace Communication.Modbus.Utils
         }
 
 
-        private static byte[] BuildTCPTxFrame(Request tx)
+        private static byte[] BuildTCPTxFrame(ModbusTx tx)
         {
             var baseFrame = BuildRTUTxFrame(tx);
             tx.ByteCount = (ushort)(baseFrame.Length - 2);
@@ -132,7 +134,7 @@ namespace Communication.Modbus.Utils
                 throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
 
             int expectedByteCount = (length + 7) / 8;
-            if (rx.Length < ModbusParams.RTU_DATA_START + expectedByteCount)
+            if (rx.Length < ModbusParams.RTU_BYTECOUNT_START + expectedByteCount)
                 throw new ArgumentException("The rx data is not enough for the requested length.", nameof(rx));
 
             bool[] result = new bool[length];
@@ -142,7 +144,7 @@ namespace Communication.Modbus.Utils
                 var byteIndex = i / 8;
                 var bitIndex = i % 8;
 
-                result[i] = ((rx[ModbusParams.RTU_DATA_START + byteIndex] >> bitIndex) & 1) == 1;
+                result[i] = ((rx[ModbusParams.RTU_BYTECOUNT_START + byteIndex] >> bitIndex) & 1) == 1;
             }
 
             return result;
@@ -160,7 +162,7 @@ namespace Communication.Modbus.Utils
 
             for (int i = 0; i < length; i++)
             {
-                var index = ModbusParams.RTU_DATA_START + i * 2;
+                var index = ModbusParams.RTU_BYTECOUNT_START + i * 2;
                 result[i] = (byte)((rx[index] << 8) | rx[index + 1]);
             }
             return result;
@@ -182,6 +184,20 @@ namespace Communication.Modbus.Utils
                 return false;
 
             return true;
+        }
+
+
+
+        public static ushort ReadUInt16BigEndian(ReadOnlySequence<byte> seq)
+        {
+            // 单段快速路径
+            if (seq.IsSingleSegment)
+                return BinaryPrimitives.ReadUInt16BigEndian(seq.FirstSpan);
+
+            // 跨段安全路径（极少触发）
+            Span<byte> tmp = stackalloc byte[2];
+            seq.CopyTo(tmp);
+            return BinaryPrimitives.ReadUInt16BigEndian(tmp);
         }
     }
 }

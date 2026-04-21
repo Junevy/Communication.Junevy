@@ -44,7 +44,7 @@ namespace Communication.Modbus.Common
         ///// <summary>
         ///// 格式接收日志（自动计算时间差）
         ///// </summary>
-        public static void Rx(this ISerilog logger, string ip, byte[] data)
+        public static void Rx(this ISerilog logger, string ip, ReadOnlySpan<byte> data)
         {
             long now = sw.ElapsedMilliseconds;
             long delta = now - lastTimestamp;
@@ -52,7 +52,7 @@ namespace Communication.Modbus.Common
             logger.Debug(
                 "[RX] [{IP}] <-- {Data} (+{Delta} ms)",
                 ip,
-                data.ToHex(),
+                data.ToArray().ToHex(),
                 delta
             );
 

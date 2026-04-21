@@ -1,9 +1,11 @@
-﻿namespace Communication.Modbus.Core
+﻿using System.Buffers;
+
+namespace Communication.Modbus.Core
 {
     /// <summary>
     /// ModBus 响应数据类，用于封装 ModBus 响应数据。
     /// </summary>
-    public class Response
+    public class ModbusResult<T>
     {
         /// <summary>
         /// 是否成功响应。
@@ -11,24 +13,14 @@
         public bool IsSuccess { get; set; }
 
         /// <summary>
-        /// 响应原始数据
+        /// 响应数据
         /// </summary>
-        public byte[]? Data { get; set; }
-
-        /// <summary>
-        /// 解析后的响应数据
-        /// </summary>
-        public byte[]? RawData { get; set; }
+        public T? Data { get; set; }
         
         /// <summary>
         /// 错误信息。
         /// </summary>
         public string? ErrorMessage { get; set; }
-        
-        /// <summary>
-        /// 响应地址。
-        /// </summary>
-        public ushort? Address { get; set; }
 
         /// <summary>
         /// 成功响应。
@@ -36,7 +28,7 @@
         /// <param name="data">响应数据。</param>
         /// <returns>成功响应对象。</returns>
         /// <param name="rawData">原始响应数据。</param>
-        public static Response Success(byte[] data, byte[]? rawData = default) => new() { IsSuccess = true, Data = data, RawData = rawData };
+        public static ModbusResult<T> Success(T data) => new() { IsSuccess = true, Data = data };
         
         /// <summary>
         /// 失败响应。
@@ -44,7 +36,7 @@
         /// <param name="errMsg">错误信息。</param>
         /// <param name="data">响应数据。</param>
         /// <returns>失败响应对象。</returns>
-        public static Response Fail(string errMsg, byte[]? data = default)
+        public static ModbusResult<T> Fail(string errMsg, T? data = default)
         {
             return new() { IsSuccess = false, ErrorMessage = errMsg, Data = data };
         }

@@ -40,7 +40,7 @@ namespace Communication.Test
         #endregion
 
         public ModbusRTUConfig Config { get; set; } = new();
-        public Request Tx { get; set; } = new();
+        public ModbusTx Tx { get; set; } = new();
 
         public MainWindowViewModel()
         {

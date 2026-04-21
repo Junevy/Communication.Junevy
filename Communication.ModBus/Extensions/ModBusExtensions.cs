@@ -11,12 +11,12 @@ namespace Communication.Modbus.Extensions
         /// <summary>
         /// 同步读取线圈 (0x01 - Read Coils)
         /// </summary>
-        public static Response ReadCoils(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        public static bool[] ReadCoils(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
             if (length == 0 || length > 2000)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -26,10 +26,10 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = modBus.Request(tx);
-            if (result.IsSuccess && result.Data != null)
+            if (result.IsSuccess && result.Data.Length > 0)
             {
                 var b = ModbusTools.ParseCoils(result.Data, length);
-                return result;
+                return b;
             }
 
             return result;
@@ -44,12 +44,12 @@ namespace Communication.Modbus.Extensions
         /// <param name="length">读取数量（线圈数）</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> ReadCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        public static async Task<bool[]> ReadCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 2000)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -59,10 +59,10 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = await modBus.RequestAsync(tx, cancellationToken);
-            if (result.IsSuccess && result.Data != null)
+            if (result.IsSuccess && result.Data.Length > 0)
             {
                 var b = ModbusTools.ParseCoils(result.Data, length);
-                return result;
+                return b;
             }
 
             return result;
@@ -71,12 +71,12 @@ namespace Communication.Modbus.Extensions
         /// <summary>
         /// 同步读取离散输入 (0x02 - Read Discrete Inputs)
         /// </summary>
-        public static Response ReadDiscreteInputs(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        public static bool[] ReadDiscreteInputs(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
             if (length == 0 || length > 2000)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -86,7 +86,7 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = modBus.Request(tx);
-            if (result.IsSuccess && result.Data != null)
+            if (result.IsSuccess && result.Data.Length > 0)
             {
                 var b = ModbusTools.ParseCoils(result.Data, length);
                 return result;
@@ -104,12 +104,12 @@ namespace Communication.Modbus.Extensions
         /// <param name="length">读取数量（离散输入数）</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> ReadDiscreteInputsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        public static async Task<bool[]> ReadDiscreteInputsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 2000)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -119,10 +119,10 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = await modBus.RequestAsync(tx, cancellationToken);
-            if (result.IsSuccess && result.Data != null)
+            if (result.IsSuccess && result.Data.Length > 0)
             {
                 var b = ModbusTools.ParseCoils(result.Data, length);
-                return result;
+                return b;
             }
 
             return result;
@@ -131,12 +131,12 @@ namespace Communication.Modbus.Extensions
         /// <summary>
         /// 同步读取保持寄存器 (0x03 - Read Holding Registers)
         /// </summary>
-        public static Response ReadHoldingRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        public static ushort[] ReadHoldingRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
             if (length == 0 || length > 125)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -146,7 +146,7 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = modBus.Request(tx);
-            if (result.IsSuccess && result.Data != null)
+            if (result.IsSuccess && result.Data.Length > 0)
             {
                 result.Data = ModbusTools.ParseRegisters(result.Data, length);
                 return result;
@@ -164,12 +164,12 @@ namespace Communication.Modbus.Extensions
         /// <param name="length">读取数量（寄存器数）</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> ReadHoldingRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        public static async Task<ushort[]> ReadHoldingRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 125)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -191,12 +191,12 @@ namespace Communication.Modbus.Extensions
         /// <summary>
         /// 同步读取输入寄存器 (0x04 - Read Input Registers)
         /// </summary>
-        public static Response ReadInputRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        public static ushort[] ReadInputRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
             if (length == 0 || length > 125)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -224,12 +224,12 @@ namespace Communication.Modbus.Extensions
         /// <param name="length">读取数量（寄存器数）</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> ReadInputRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        public static async Task<ushort[]> ReadInputRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 125)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -251,9 +251,9 @@ namespace Communication.Modbus.Extensions
         /// <summary>
         /// 同步写单线圈 (0x05 - Write Single Coil)
         /// </summary>
-        public static Response WriteSingleCoil(this IModbus modBus, byte slaveId, ushort start, bool value)
+        public static bool WriteSingleCoil(this IModbus modBus, byte slaveId, ushort start, bool value)
         {
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -263,7 +263,7 @@ namespace Communication.Modbus.Extensions
                 Data = [(byte)(value ? 0xFF : 0x00), 0x00]
             };
 
-            return modBus.Request(tx);
+            return modBus.Request(tx).IsSuccess;
         }
 
         /// <summary>
@@ -275,9 +275,9 @@ namespace Communication.Modbus.Extensions
         /// <param name="value">要写入的布尔值 (true: 0xFF00, false: 0x0000)</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> WriteSingleCoilAsync(this IModbus modBus, byte slaveId, ushort start, bool value, CancellationToken cancellationToken = default)
+        public static async Task<bool> WriteSingleCoilAsync(this IModbus modBus, byte slaveId, ushort start, bool value, CancellationToken cancellationToken = default)
         {
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -287,15 +287,16 @@ namespace Communication.Modbus.Extensions
                 Data = [(byte)(value ? 0xFF : 0x00), 0x00]
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            return result.IsSuccess;
         }
 
         /// <summary>
         /// 同步写单保持寄存器 (0x06 - Write Single Holding Register)
         /// </summary>
-        public static Response WriteSingleRegister(this IModbus modBus, byte slaveId, ushort start, ushort value)
+        public static bool WriteSingleRegister(this IModbus modBus, byte slaveId, ushort start, ushort value)
         {
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -305,7 +306,7 @@ namespace Communication.Modbus.Extensions
                 Data = BitExtentions.ToBytesByBigEndian(value)
             };
 
-            return modBus.Request(tx);
+            return modBus.Request(tx).IsSuccess;
         }
 
         /// <summary>
@@ -317,9 +318,9 @@ namespace Communication.Modbus.Extensions
         /// <param name="value">要写入的寄存器值</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> WriteSingleRegisterAsync(this IModbus modBus, byte slaveId, ushort start, ushort value, CancellationToken cancellationToken = default)
+        public static async Task<bool> WriteSingleRegisterAsync(this IModbus modBus, byte slaveId, ushort start, ushort value, CancellationToken cancellationToken = default)
         {
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -329,20 +330,21 @@ namespace Communication.Modbus.Extensions
                 Data = BitExtentions.ToBytesByBigEndian(value)
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            return result.IsSuccess;
         }
 
         /// <summary>
         /// 同步写多线圈 (0x0F - Write Multiple Coils)
         /// </summary>
-        public static Response WriteMultipleCoils(this IModbus modBus, byte slaveId, ushort start, ushort length, byte[] data)
+        public static bool WriteMultipleCoils(this IModbus modBus, byte slaveId, ushort start, ushort length, byte[] data)
         {
             if (length == 0 || length > 1968)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 1968.");
             if (data == null || data.Length == 0)
                 throw new ArgumentException("The data cannot be null or empty.", nameof(data));
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -352,7 +354,7 @@ namespace Communication.Modbus.Extensions
                 Data = data
             };
 
-            return modBus.Request(tx);
+            return modBus.Request(tx).IsSuccess;
         }
 
         /// <summary>
@@ -365,14 +367,14 @@ namespace Communication.Modbus.Extensions
         /// <param name="data">打包后的线圈数据</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> WriteMultipleCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, byte[] data, CancellationToken cancellationToken = default)
+        public static async Task<bool> WriteMultipleCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, byte[] data, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 1968)
                 throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 1968.");
             if (data == null || data.Length == 0)
                 throw new ArgumentException("The data cannot be null or empty.", nameof(data));
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -382,20 +384,21 @@ namespace Communication.Modbus.Extensions
                 Data = data
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            return result.IsSuccess;
         }
 
         /// <summary>
         /// 同步写多保持寄存器 (0x10 - Write Multiple Holding Registers)
         /// </summary>
-        public static Response WriteMultipleRegisters(this IModbus modBus, byte slaveId, ushort start, ushort[] values)
+        public static bool WriteMultipleRegisters(this IModbus modBus, byte slaveId, ushort start, ushort[] values)
         {
             if (values == null || values.Length == 0)
                 throw new ArgumentException("The values cannot be null or empty.", nameof(values));
             if (values.Length > 123)
                 throw new ArgumentOutOfRangeException(nameof(values), "The length must be between 1 and 123.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -405,7 +408,7 @@ namespace Communication.Modbus.Extensions
                 Data = values.ToByteArrayBigEndian()
             };
 
-            return modBus.Request(tx);
+            return modBus.Request(tx).IsSuccess;
         }
 
         /// <summary>
@@ -417,14 +420,14 @@ namespace Communication.Modbus.Extensions
         /// <param name="values">要写入的寄存器值数组</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>响应结果</returns>
-        public static async Task<Response> WriteMultipleRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort[] values, CancellationToken cancellationToken = default)
+        public static async Task<bool> WriteMultipleRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort[] values, CancellationToken cancellationToken = default)
         {
             if (values == null || values.Length == 0)
                 throw new ArgumentException("The values cannot be null or empty.", nameof(values));
             if (values.Length > 123)
                 throw new ArgumentOutOfRangeException(nameof(values), "The length must be between 1 and 123.");
 
-            var tx = new Request
+            var tx = new ModbusTx
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -434,7 +437,8 @@ namespace Communication.Modbus.Extensions
                 Data = values.ToByteArrayBigEndian()
             };
 
-            return await modBus.RequestAsync(tx, cancellationToken);
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            return result.IsSuccess;
         }
     }
 }

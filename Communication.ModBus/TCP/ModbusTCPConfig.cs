@@ -4,7 +4,7 @@ namespace Communication.Modbus.TCP
 {
     public class ModbusTCPConfig
     {
-        public string Address { get; set; } = ModbusParams.LOCAL_ADDRESS ?? throw new ArgumentNullException(nameof(Address));
+        public string Address { get; set; } = ModbusParams.TCP_LOCAL_ADDRESS ?? throw new ArgumentNullException(nameof(Address));
 
         public int Port { get; private set; } = ModbusParams.TCP_PORT;
 
@@ -40,5 +40,7 @@ namespace Communication.Modbus.TCP
             this.Port = port;
             return true;
         }
+
+
     }
 }

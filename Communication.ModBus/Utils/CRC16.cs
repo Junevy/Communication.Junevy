@@ -18,6 +18,20 @@
             return receivedCRC.SequenceEqual(calculatedCRC);
         }
 
+
+        /// <summary>
+        /// 验证ReadOnlySpan<byte> 值的CRC16校验码是否正确
+        /// </summary>
+        /// <param name="frame">需要被验证CRC16校验码的ReadOnlySpan<byte>类型的值</param>
+        /// <returns>bool类型的校验结果</returns>
+        public static bool ValidateCRC(ReadOnlySpan<byte> frame)
+        {
+            var dataWithoutCRC = frame.Slice(0, frame.Length - 2);
+            var receivedCRC = frame.Slice(frame.Length - 2, frame.Length);
+            var calculatedCRC = CRCLittleEndian(dataWithoutCRC);
+            return receivedCRC.SequenceEqual(calculatedCRC);
+        }
+
         /// <summary>
         /// 向byte[] 值的末尾添加CRC16校验码
         /// </summary>
@@ -54,12 +68,42 @@
             return crc;
         }
 
+        public static ushort Compute(ReadOnlySpan<byte> data)
+        {
+            ushort crc = 0xFFFF;
+
+            for (int i = 0; i < data.Length; i++)
+            {
+                crc ^= data[i]; // 异或当前字节
+
+                for (int j = 0; j < 8; j++)
+                {
+                    if ((crc & 0x0001) != 0)
+                    {
+                        crc >>= 1;
+                        crc ^= 0xA001; // 多项式
+                    }
+                    else
+                    {
+                        crc >>= 1;
+                    }
+                }
+            }
+            return crc;
+        }
+
         /// <summary>
         /// 计算byte[] 值的CRC16校验码，并按照小端序返回
         /// </summary>
         /// <param name="data">需要被计算CRC16的byte[]类型的值</param>
         /// <returns>byte[]类型的CRC16校验码，按照小端序返回</returns>
         public static byte[] CRCLittleEndian(byte[] data)
+        {
+            ushort crc = Compute(data);
+            return crc.ToBytesByLittleEndian(); // 取低字节
+        }
+
+        public static byte[] CRCLittleEndian(ReadOnlySpan<byte> data)
         {
             ushort crc = Compute(data);
             return crc.ToBytesByLittleEndian(); // 取低字节

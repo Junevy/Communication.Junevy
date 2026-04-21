@@ -1,4 +1,6 @@
-﻿namespace Communication.Modbus.Core
+﻿using System.Buffers;
+
+namespace Communication.Modbus.Core
 {
     /// <summary>
     /// ModBus 接口，用于定义 ModBus 操作。
@@ -37,7 +39,7 @@
         /// </summary>
         /// <param name="tx">ModBus 指令</param>
         /// <returns>ModBus 指令的响应</returns>
-        public Response Request(Request tx);
+        public ModbusResult<ReadOnlyMemory<byte>> Request(ModbusTx tx);
 
         /// <summary>
         /// 异步发送 ModBus 指令
@@ -45,6 +47,6 @@
         /// <param name="tx">ModBus 指令</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>ModBus 指令的响应</returns>
-        public Task<Response> RequestAsync(Request tx, CancellationToken cancellationToken = default);
+        public Task<ModbusResult<ReadOnlyMemory<byte>>> RequestAsync(ModbusTx tx, CancellationToken cancellationToken = default);
     }
 }

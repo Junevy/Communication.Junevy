@@ -3,7 +3,7 @@ namespace Communication.Modbus.Core
     /// <summary>
     /// ModBus 发送数据类，用于封装 ModBus 发送数据。
     /// </summary>
-    public class Request
+    public class ModbusTx
     {
         /// <summary>
         /// 功能码改变事件。
@@ -11,9 +11,20 @@ namespace Communication.Modbus.Core
         public event Action<ModbusFunctionCode>? OnFunctionCodeChanged;
         public event Action<ModbusProtocolType>? OnProtocolTypeChanged;
 
+
         public ushort TransactionId { get; set; } = 0x0000;
 
-        public ModbusProtocolType ProtocolType {get; set;} = ModbusProtocolType.TCP;
+
+        private ModbusProtocolType protocolType = ModbusProtocolType.TCP;
+        public ModbusProtocolType ProtocolType
+        {
+            get => protocolType;
+            set
+            {
+                protocolType = value;
+                OnProtocolTypeChanged?.Invoke(protocolType);
+            }
+        }
 
         public ushort ByteCount {get; set;} = 0x00;
         /// <summary>
@@ -47,7 +58,7 @@ namespace Communication.Modbus.Core
         /// <summary>
         /// 数据。
         /// </summary>
-        public byte[]? Data { get; set; } = null;
+        public byte[]? Data { get; set; }
 
 
         /// <summary>
@@ -56,6 +67,11 @@ namespace Communication.Modbus.Core
         public void InvokeOnFunctionCodeChanged()
         {
             OnFunctionCodeChanged?.Invoke(FunctionCode);
+        }
+
+        public void InvokeOnProtocolTypeChanged()
+        {
+            OnProtocolTypeChanged?.Invoke(ProtocolType);
         }
     }
 }
