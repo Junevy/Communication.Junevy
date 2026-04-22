@@ -82,83 +82,25 @@ namespace Communication.Test
         [RelayCommand]
         public void Connect()
         {
-            // if (Config.PortName is null)
-            // {
-            //     MessageBox.Show("The port name can not be null!");
-            //     return;
-            // }
-
-            // mr.Connect();
             ModbusFactory factory = new();
             var result = factory.TryAddModbus(out tcp, new ModbusTCPConfig(), "test");
             if (result)
-                _ = tcp.Connect();
+                _ = tcp?.Connect();
         }
 
         [RelayCommand]
         public async Task ExecuteAsync()
         {
 
-            var r = tcp.ReadCoils(1,0,4);
-            Console.Write(r);
-            
-            // Request tx = new Request();
-
-            // byte[] test = [0x01];
-            // ushort test = 
-            // tx.Data = [1, 2, 132];
-
-            // var result = await tcp.RequestAsync(tx);
-
-            // Console.Write(result);
-            // if (!ProcessTxData(out byte[] txData))
-            //     return;
-
-            // var currentAdrs = Tx.Start; // 记录当前地址
-            // var currentLength = Tx.Length;
-
-            // Tx.Data = txData;
-            // CancellationTokenSource tk = new();
-
-            // Console.WriteLine((ushort)Tx.FunctionCode);
-
-            // var r = await mr.SendAsync(Tx, tk.Token);
-
-            // if (r.IsSuccess && r.Data != null && r.Data[1] < (byte)ModBusFunctionCode.WriteCoils)
-            // {
-            //     // var coilsData = ModBusTools.ParseCoils(r.Data, currentLength);
-
-            //     // for (int i = 0; i < currentLength; i++)
-            //     // {
-            //     //     DataList.Add(new ModBusData()
-            //     //     {
-            //     //         Address = (ushort)(currentAdrs + i),
-            //     //         Value = coilsData[i]
-            //     //     });
-            //     // }
-
-            //     var registerData = ModBusTools.ParseRegisters(r.Data, currentLength);
-
-            //     for (int i = 0; i < currentLength; i++)
-            //     {
-            //         DataList.Add(new ModBusData()
-            //         {
-            //             Address = (ushort)(currentAdrs + i),
-            //             Value = registerData[i]
-            //         });
-            //     }
-            // }
-            // else
-            // {
-            //     //var hexStr = r.Data?.ToHexString();
-            //     //MessageBox.Show(hexStr);
-            // }
+            var r = await tcp.ReadCoilsAsync(1,0,4);
+            Console.Write(r.ToString());
+  
         }
 
         [RelayCommand]
         public void Disconnect()
         {
-            mr.Disconnect();
+            tcp?.Disconnect();
         }
 
         private void StateMonitor()
@@ -179,34 +121,6 @@ namespace Communication.Test
             });
         }
 
-        private bool ProcessTxData(out byte[] txData)
-        {
-            var temp = DataList.Select(x => x.Value).ToArray();
-            txData = temp.ToByteArrayBigEndian();
-
-
-            // 功能区分，处理写入数据和读取数据
-            if (Tx.FunctionCode >= ModbusFunctionCode.WriteCoil)
-            {
-                if (txData == null || txData.Length <= 0)
-                {
-                    MessageBox.Show("The data can not be null!");
-                    return false;
-                }
-
-                if (Tx.FunctionCode == ModbusFunctionCode.WriteCoil)
-                    txData = txData.ToCoils();
-                if (Tx.FunctionCode == ModbusFunctionCode.WriteMultiCoils)
-                    txData = temp.ToMultiCoils();
-            }
-            // 非写入功能，清空数据列表
-            else
-            {
-                DataList.Clear();
-            }
-
-            return true;
-        }
 
         partial void OnLengthChanged(ushort oldValue, ushort newValue)
         {

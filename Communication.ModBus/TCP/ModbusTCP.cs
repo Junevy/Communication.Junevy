@@ -1,10 +1,8 @@
 using Communication.Modbus.Common;
 using Communication.Modbus.Core;
 using Communication.Modbus.Utils;
-using Communication.Modbus.Core;
+using System;
 using System.Buffers;
-using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 
@@ -13,8 +11,8 @@ namespace Communication.Modbus.TCP
     public sealed class ModbusTCP : IModbus
     {
         private readonly Socket socket;
-        private readonly NetworkStream stream;
-        private readonly PipeReader reader;
+        private NetworkStream stream;
+        private PipeReader reader;
 
         private readonly ISerilog? logger = Serilogger.Instance;
         private readonly SemaphoreSlim requestLock = new(1, 1);
@@ -26,20 +24,25 @@ namespace Communication.Modbus.TCP
         {
             ArgumentNullException.ThrowIfNull(config);
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            stream = new NetworkStream(socket, ownsSocket: true);
-            reader = PipeReader.Create(stream, new StreamPipeReaderOptions(
-                pool: MemoryPool<byte>.Shared,
-                bufferSize: 2048,
-                minimumReadSize: 1,
-                leaveOpen: false));
-
             this.Config = config;
+
+
         }
 
         private void InitialSocket(ModbusTCPConfig config)
         {
             socket.ReceiveTimeout = config.ReadTimeOut;
             socket.SendTimeout = config.WriteTimeOut;
+        }
+
+        private void InitialStream()
+        {
+            stream = new NetworkStream(socket, ownsSocket: true);
+            reader = PipeReader.Create(stream, new StreamPipeReaderOptions(
+                pool: MemoryPool<byte>.Shared,
+                bufferSize: 2048,
+                minimumReadSize: 1,
+                leaveOpen: false));
         }
 
         public bool Connect()
@@ -57,6 +60,7 @@ namespace Communication.Modbus.TCP
                 if (success)
                 {
                     socket.EndConnect(result);
+                    InitialStream();
                     return true;
                 }
                 else
@@ -85,6 +89,8 @@ namespace Communication.Modbus.TCP
             try
             {
                 await socket.ConnectAsync(Config.Address, Config.Port, cancellationToken.Token);
+                InitialStream();
+
                 return true;
             }
             catch (OperationCanceledException ex)
@@ -103,7 +109,7 @@ namespace Communication.Modbus.TCP
         {
             try
             {
-                socket.Disconnect(true);
+                socket.Disconnect(false);
             }
             catch (Exception ex)
             {
@@ -303,24 +309,29 @@ namespace Communication.Modbus.TCP
                 receiveTimeoutToken.Token.ThrowIfCancellationRequested();
 
                 // Read MBAP Header
-                ReadOnlySequence<byte> mbap = await ReadExactAsync(ModbusParams.MBAP_LENGTH, receiveTimeoutToken.Token);
+                ReadOnlySequence<byte> mbap = await ReadExactAsync(0, ModbusParams.MBAP_LENGTH, receiveTimeoutToken.Token);
 
-                // Calculate PDU length and read PDU
+                // Calculate PDU length and total length
                 var lowByte = mbap.FirstSpan[5];
                 var highByte = mbap.FirstSpan[4];
                 ushort pduLength = (ushort) (BitExtentions.ToUshort(lowByte, highByte) - 1);
-                ReadOnlySequence<byte> rest = await ReadExactAsync(pduLength, receiveTimeoutToken.Token);
 
+                if (pduLength < 0 || pduLength > 253) // Modbus standard validation
+                    throw new InvalidDataException("Invalid PDU length");
+
+                ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
                 // Rent memory
-                ushort totalLength = (ushort) (ModbusParams.MBAP_LENGTH + pduLength);
                 using var owner = MemoryPool<byte>.Shared.Rent(totalLength);
                 var target = owner.Memory[..totalLength];
-
-                // Merge MBAP and PDU
                 mbap.CopyTo(target.Span);
-                rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
-                var parsed = ModbusRxParser.ParseRx(target, tx);
 
+                ReadOnlySequence<byte> rest = await ReadExactAsync(ModbusParams.MBAP_LENGTH, pduLength, receiveTimeoutToken.Token);
+                rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
+                reader.AdvanceTo(mbap.Start, rest.End); // 释放pipelines
+
+                //var b = target.ToArray();
+
+                var parsed = ModbusRxParser.ParseRx(target, tx);
                 if (parsed.IsSuccess)
                     return ModbusResult<byte[]>.Success(parsed.Data.Span.ToArray());
                 return ModbusResult<byte[]>.Fail(parsed?.ErrorMessage ?? "Parse Rx error.");
@@ -337,7 +348,7 @@ namespace Communication.Modbus.TCP
             }
         }
 
-        private async ValueTask<ReadOnlySequence<byte>> ReadExactAsync(int length, CancellationToken cancellationToken = default)
+        private async ValueTask<ReadOnlySequence<byte>> ReadExactAsync(int start, int length, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -346,10 +357,9 @@ namespace Communication.Modbus.TCP
                     ReadResult result = await reader.ReadAsync(cancellationToken);
                     ReadOnlySequence<byte> sequence = result.Buffer;
 
-                    if (sequence.Length >= length)
+                    if (sequence.Length >= length + start)
                     {
-                        ReadOnlySequence<byte> slice = sequence.Slice(0, length);
-                        reader.AdvanceTo(slice.End, sequence.End);
+                        ReadOnlySequence<byte> slice = sequence.Slice(start, length);
                         return slice;
                     }
 

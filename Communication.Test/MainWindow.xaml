@@ -133,8 +133,7 @@
                             Height="20"
                             Margin="0,10,0,0"
                             Command="{Binding DisconnectCommand}"
-                            Content="Disconnect"
-                            IsEnabled="{Binding IsConnected}" />
+                            Content="Disconnect" />
                     </StackPanel>
                 </Grid>
             </GroupBox>

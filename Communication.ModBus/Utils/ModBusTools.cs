@@ -22,7 +22,7 @@ namespace Communication.Modbus.Utils
                     return false;
             }
 
-            if (tx.ProtocolType != 0x0000) return false;
+            //if (tx.ProtocolType != 0x0000) return false;
 
             return true;
         }
@@ -122,29 +122,30 @@ namespace Communication.Modbus.Utils
         /// <summary>
         /// 解析ModBus接收帧中的线圈数据
         /// </summary>
-        /// <param name="rx">ModBus接收帧</param>
+        /// <param name="frame">ModBus接收帧</param>
         /// <param name="length">读取线圈数量</param>
         /// <returns>读取到的线圈数据</returns>
-        public static bool[] ParseCoils(byte[] rx, int length)
+        public static bool[] ParseCoils(byte[] frame, ModbusProtocolType protocolType, int length)
         {
-            if (rx == null)
-                throw new ArgumentNullException(nameof(rx), "The rx data cannot be null.");
+            if (frame == null)
+                throw new ArgumentNullException(nameof(frame), "The rx data cannot be null.");
 
             if (length <= 0)
                 throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
 
             int expectedByteCount = (length + 7) / 8;
-            if (rx.Length < ModbusParams.RTU_BYTECOUNT_START + expectedByteCount)
-                throw new ArgumentException("The rx data is not enough for the requested length.", nameof(rx));
+            if (frame.Length < ModbusParams.RTU_BYTECOUNT + expectedByteCount)
+                throw new ArgumentException("The rx data is not enough for the requested length.", nameof(frame));
 
             bool[] result = new bool[length];
+            var start = protocolType == ModbusProtocolType.TCP ? ModbusParams.TCP_PDU_START : ModbusParams.RTU_BYTECOUNT;
 
             for (int i = 0; i < length; i++)
             {
                 var byteIndex = i / 8;
                 var bitIndex = i % 8;
 
-                result[i] = ((rx[ModbusParams.RTU_BYTECOUNT_START + byteIndex] >> bitIndex) & 1) == 1;
+                result[i] = ((frame[start + byteIndex] >> bitIndex) & 1) == 1;
             }
 
             return result;
@@ -162,7 +163,7 @@ namespace Communication.Modbus.Utils
 
             for (int i = 0; i < length; i++)
             {
-                var index = ModbusParams.RTU_BYTECOUNT_START + i * 2;
+                var index = ModbusParams.RTU_BYTECOUNT + i * 2;
                 result[i] = (byte)((rx[index] << 8) | rx[index + 1]);
             }
             return result;
