@@ -110,14 +110,14 @@ namespace Communication.Modbus.TCP
                 logger?.Warning("Close socket has been occured an error : {ex.Message}", ex.Message);
             }
         }
-
-        public ModbusResult<ReadOnlyMemory<byte>> Request(ModbusTx tx)
+        
+        public ModbusResult<byte[]> Request(ModbusTx tx)
         {
             if (!CheckConnection())
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Not connected.");
+                return ModbusResult<byte[]>.Fail("Not connected.");
 
             if (!ModbusTools.CheckTx(tx))
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Invalid Tx.");
+                return ModbusResult<byte[]>.Fail("Invalid Tx.");
 
             requestLock.Wait();
 
@@ -125,21 +125,20 @@ namespace Communication.Modbus.TCP
             {
                 var sendResult = Send(tx);
                 if (!sendResult)
-                    return ModbusResult<ReadOnlyMemory<byte>>.Fail("Send error.");
+                    return ModbusResult<byte[]>.Fail("Send error.");
 
                 return Read(tx);
             }
             catch (Exception ex)
             {
                 logger?.Error("Request socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Request error.");
+                return ModbusResult<byte[]>.Fail("Request error.");
             }
             finally
             {
                 requestLock.Release();
             }
         }
-
         private bool Send(ModbusTx tx)
         {
             try
@@ -167,40 +166,42 @@ namespace Communication.Modbus.TCP
                 return false;
             }
         }
-
-        private ModbusResult<ReadOnlyMemory<byte>> Read(ModbusTx tx)
+        private ModbusResult<byte[]> Read(ModbusTx tx)
         {
             try
             {
-                ReadOnlySequence<byte> mbap = ReadExact(ModbusParams.MBAP_LENGTH);  // Read MBAP
+                // Calculate PDU length and read PDU
+                ReadOnlySequence<byte> mbap = ReadExact(ModbusParams.MBAP_LENGTH);
+                var lowByte = mbap.FirstSpan[5];
+                var highByte = mbap.FirstSpan[4];
+                ushort pduLength = (ushort) (BitExtentions.ToUshort(lowByte, highByte) - 1);
+                ReadOnlySequence<byte> rest = ReadExact(pduLength);
 
-                var tempSpan = mbap.FirstSpan;
-                ushort pduLength = BitExtentions.ToUshort(tempSpan[1], tempSpan[0]);  // Get PDU length
-                ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
-                ReadOnlySequence<byte> rest = ReadExact(pduLength);  // Read PDU
+                // Rent memory
+                ushort totalLength = (ushort) (ModbusParams.MBAP_LENGTH + pduLength);
+                using var owner = MemoryPool<byte>.Shared.Rent(totalLength);
+                var target = owner.Memory[..totalLength];
 
-                var owner = MemoryPool<byte>.Shared.Rent(totalLength);  // Rent memory 
-                var target = owner.Memory[..totalLength];  // Get target memory
-
-                // Merge MBAP and PDU to target memory
-                mbap.CopyTo(target.Span); 
+                // Merge MBAP and PDU
+                mbap.CopyTo(target.Span);
                 rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
+                var parsed = ModbusRxParser.ParseRx(target, tx);
 
-                return ModbusRxParser.ParseRx(target, tx);  // Parse RX frame
-
+                if (parsed.IsSuccess)
+                    return ModbusResult<byte[]>.Success(parsed.Data.Span.ToArray());
+                return ModbusResult<byte[]>.Fail(parsed?.ErrorMessage ?? "Parse error.");
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
             {
                 logger?.Warning("Receive socket has been timeout : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Receive timeout.");
+                return ModbusResult<byte[]>.Fail("Receive timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Receive socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Receive error.");
+                return ModbusResult<byte[]>.Fail("Receive error.");
             }
         }
-
         private ReadOnlySequence<byte> ReadExact(int length)
         {
             while (true)
@@ -224,13 +225,13 @@ namespace Communication.Modbus.TCP
             }
         }
 
-        public async Task<ModbusResult<ReadOnlyMemory<byte>>> RequestAsync(ModbusTx tx, CancellationToken cancellationToken = default)
+        public async Task<ModbusResult<byte[]>> RequestAsync(ModbusTx tx, CancellationToken cancellationToken = default)
         {
             if (!CheckConnection())
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Not connected.");
+                return ModbusResult<byte[]>.Fail("Not connected.");
 
             if (!ModbusTools.CheckTx(tx))
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Invalid Tx.");
+                return ModbusResult<byte[]>.Fail("Invalid Tx.");
 
             try
             {
@@ -238,19 +239,19 @@ namespace Communication.Modbus.TCP
 
                 var sendResult = await SendAsync(tx, cancellationToken);
                 if (!sendResult)
-                    return ModbusResult<ReadOnlyMemory<byte>>.Fail("Send error.");
+                    return ModbusResult<byte[]>.Fail("Send error.");
 
                 return await ReadAsync(tx, cancellationToken);
             }
             catch (OperationCanceledException ex)
             {
                 logger?.Warning("Request socket has been timeout : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Request timeout.");
+                return ModbusResult<byte[]>.Fail("Request timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Request socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Request error.");
+                return ModbusResult<byte[]>.Fail("Request error.");
             }
             finally
             {
@@ -293,7 +294,7 @@ namespace Communication.Modbus.TCP
             }
         }
 
-        private async ValueTask<ModbusResult<ReadOnlyMemory<byte>>> ReadAsync(ModbusTx tx, CancellationToken cancellationToken = default)
+        private async ValueTask<ModbusResult<byte[]>> ReadAsync(ModbusTx tx, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -305,29 +306,34 @@ namespace Communication.Modbus.TCP
                 ReadOnlySequence<byte> mbap = await ReadExactAsync(ModbusParams.MBAP_LENGTH, receiveTimeoutToken.Token);
 
                 // Calculate PDU length and read PDU
-                ushort pduLength = ModbusTools.ReadUInt16BigEndian(mbap);
+                var lowByte = mbap.FirstSpan[5];
+                var highByte = mbap.FirstSpan[4];
+                ushort pduLength = (ushort) (BitExtentions.ToUshort(lowByte, highByte) - 1);
                 ReadOnlySequence<byte> rest = await ReadExactAsync(pduLength, receiveTimeoutToken.Token);
 
                 // Rent memory
-                ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
-                var owner = MemoryPool<byte>.Shared.Rent(totalLength);
+                ushort totalLength = (ushort) (ModbusParams.MBAP_LENGTH + pduLength);
+                using var owner = MemoryPool<byte>.Shared.Rent(totalLength);
                 var target = owner.Memory[..totalLength];
 
                 // Merge MBAP and PDU
                 mbap.CopyTo(target.Span);
                 rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
+                var parsed = ModbusRxParser.ParseRx(target, tx);
 
-                return ModbusRxParser.ParseRx(owner.Memory, tx);
+                if (parsed.IsSuccess)
+                    return ModbusResult<byte[]>.Success(parsed.Data.Span.ToArray());
+                return ModbusResult<byte[]>.Fail(parsed?.ErrorMessage ?? "Parse Rx error.");
             }
             catch (OperationCanceledException ex)
             {
                 logger?.Warning("Receive socket has been timeout : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Receive timeout.");
+                return ModbusResult<byte[]>.Fail("Receive timeout.");
             }
             catch (Exception ex)
             {
                 logger?.Error("Receive socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail("Receive error.");
+                return ModbusResult<byte[]>.Fail("Receive error.");
             }
         }
 

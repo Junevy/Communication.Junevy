@@ -12,6 +12,7 @@
 
         public const int RTU_BYTECOUNT_START = 2;
         public const int RTU_RESPONSE_MINIMUM_LENGTH = 5;
+        public const int RTU_POOL_SIZE = 2048;
 
 
 

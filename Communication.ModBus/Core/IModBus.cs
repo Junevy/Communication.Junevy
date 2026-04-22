@@ -39,7 +39,7 @@ namespace Communication.Modbus.Core
         /// </summary>
         /// <param name="tx">ModBus 指令</param>
         /// <returns>ModBus 指令的响应</returns>
-        public ModbusResult<ReadOnlyMemory<byte>> Request(ModbusTx tx);
+        public ModbusResult<byte[]> Request(ModbusTx tx);
 
         /// <summary>
         /// 异步发送 ModBus 指令
@@ -47,6 +47,6 @@ namespace Communication.Modbus.Core
         /// <param name="tx">ModBus 指令</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>ModBus 指令的响应</returns>
-        public Task<ModbusResult<ReadOnlyMemory<byte>>> RequestAsync(ModbusTx tx, CancellationToken cancellationToken = default);
+        public Task<ModbusResult<byte[]>> RequestAsync(ModbusTx tx, CancellationToken cancellationToken = default);
     }
 }
