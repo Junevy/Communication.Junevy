@@ -72,6 +72,7 @@ namespace Communication.Modbus.TCP
                 return false;
             }
         }
+
         public async Task<bool> ConnectAsync()
         {
             if (!ModbusTools.ValidateAddress(Config.Address) || !ModbusTools.ValidatePort(Config.Port))
@@ -97,6 +98,7 @@ namespace Communication.Modbus.TCP
                 return false;
             }
         }
+        
         public void Disconnect()
         {
             try
@@ -170,18 +172,21 @@ namespace Communication.Modbus.TCP
         {
             try
             {
-                ReadOnlySequence<byte> mbap = ReadExact(ModbusParams.MBAP_LENGTH);
-                ushort pduLength = ModbusTools.ReadUInt16BigEndian(mbap);
+                ReadOnlySequence<byte> mbap = ReadExact(ModbusParams.MBAP_LENGTH);  // Read MBAP
+
+                var tempSpan = mbap.FirstSpan;
+                ushort pduLength = BitExtentions.ToUshort(tempSpan[1], tempSpan[0]);  // Get PDU length
                 ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
+                ReadOnlySequence<byte> rest = ReadExact(pduLength);  // Read PDU
 
-                ReadOnlySequence<byte> rest = ReadExact(pduLength);
-                var owner = MemoryPool<byte>.Shared.Rent(totalLength);
-                var target = owner.Memory[..totalLength];
+                var owner = MemoryPool<byte>.Shared.Rent(totalLength);  // Rent memory 
+                var target = owner.Memory[..totalLength];  // Get target memory
 
-                mbap.CopyTo(target.Span);
+                // Merge MBAP and PDU to target memory
+                mbap.CopyTo(target.Span); 
                 rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
 
-                return ModbusRxParser.ParseRx(target, tx);
+                return ModbusRxParser.ParseRx(target, tx);  // Parse RX frame
 
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
@@ -227,10 +232,10 @@ namespace Communication.Modbus.TCP
             if (!ModbusTools.CheckTx(tx))
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail("Invalid Tx.");
 
-            await requestLock.WaitAsync(cancellationToken);
-
             try
             {
+                await requestLock.WaitAsync(cancellationToken);
+
                 var sendResult = await SendAsync(tx, cancellationToken);
                 if (!sendResult)
                     return ModbusResult<ReadOnlyMemory<byte>>.Fail("Send error.");
@@ -263,7 +268,7 @@ namespace Communication.Modbus.TCP
                 sendTimeoutToken.CancelAfter(Config.WriteTimeOut);
                 sendTimeoutToken.Token.ThrowIfCancellationRequested();
 
-                // 确保所有字节发送完成
+                // Ensure all bytes are sent
                 int totalSent = 0;
                 while (totalSent < frame.Length)
                 {
@@ -298,14 +303,17 @@ namespace Communication.Modbus.TCP
 
                 // Read MBAP Header
                 ReadOnlySequence<byte> mbap = await ReadExactAsync(ModbusParams.MBAP_LENGTH, receiveTimeoutToken.Token);
-                ushort pduLength = ModbusTools.ReadUInt16BigEndian(mbap);
-                ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
 
-                // Read PDU
+                // Calculate PDU length and read PDU
+                ushort pduLength = ModbusTools.ReadUInt16BigEndian(mbap);
                 ReadOnlySequence<byte> rest = await ReadExactAsync(pduLength, receiveTimeoutToken.Token);
+
+                // Rent memory
+                ushort totalLength = (ushort)(ModbusParams.MBAP_LENGTH + pduLength);
                 var owner = MemoryPool<byte>.Shared.Rent(totalLength);
                 var target = owner.Memory[..totalLength];
 
+                // Merge MBAP and PDU
                 mbap.CopyTo(target.Span);
                 rest.CopyTo(target.Span[ModbusParams.MBAP_LENGTH..]);
 

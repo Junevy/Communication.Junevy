@@ -1,5 +1,4 @@
-﻿using System.Buffers;
-using Communication.Modbus.Common;
+﻿using Communication.Modbus.Common;
 using Communication.Modbus.Utils;
 
 namespace Communication.Modbus.Core
@@ -29,7 +28,7 @@ namespace Communication.Modbus.Core
                 verifiedResult = TryExtractTcpRx(response, tx.SlaveId, tx.FunctionCode);
             else
             {
-                verifiedResult = TryExtractRtuRx(response.ToArray().ToList(), tx.SlaveId, tx.FunctionCode, out var frame);
+                verifiedResult = TryExtractRtuRx(response, tx.SlaveId, tx.FunctionCode, out var frame);
                 response = verifiedResult ? frame : response;
             }
   
@@ -266,26 +265,25 @@ namespace Communication.Modbus.Core
         /// <param name="functionCode">功能码</param>
         /// <param name="frame">提取到的报文</param>
         /// <returns>是否成功提取</returns>
-        private static bool TryExtractRtuRx(List<byte> buffer, byte slaveID, ModbusFunctionCode functionCode, out ReadOnlyMemory<byte> frame)
+        private static bool TryExtractRtuRx(ReadOnlyMemory<byte> buffer, byte slaveID, ModbusFunctionCode functionCode, out ReadOnlyMemory<byte> frame)
         {
-            frame = buffer.ToArray().AsMemory();
-            // frame.AsMemory();
+            frame = buffer;
 
-            if (buffer.Count < ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
+            if (buffer.Length < ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
             {
-                logger?.Warning("The response is not valid : {@buffer}", buffer);
+                logger?.Warning("The response is not valid : {@buffer}", buffer.ToArray());
                 return false;
             }
 
-            while (buffer.Count >= ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
+            while (buffer.Length > ModbusParams.RTU_RESPONSE_MINIMUM_LENGTH)
             {
-                var id = buffer[0];
-                var funcCode = buffer[1];
+                var id = buffer.Span[0];
+                var funcCode = buffer.Span[1];
 
                 if (id != slaveID)
                 {
                     logger?.Warning("The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, remove it and continue.", id, slaveID);
-                    buffer.RemoveAt(0);
+                    buffer = buffer[1..];
                     continue;
                 }
 
@@ -294,24 +292,24 @@ namespace Communication.Modbus.Core
                 {
                     const int exceptionLength = 5;
 
-                    if (exceptionLength > buffer.Count)
+                    if (exceptionLength > buffer.Length)
                     {
-                        logger?.Error("The exception response length is not matched. Actual {length}, expected {expectedLength} and buffer : {@buffer}", buffer.Count, exceptionLength, buffer);
+                        logger?.Error("The exception response length is not matched. Actual {length}, expected {expectedLength} and buffer : {@buffer}", buffer.Length, exceptionLength, buffer.ToArray());
                         return false;
                     }
 
-                    var candidate = buffer.Take(exceptionLength).ToArray();
-                    logger?.Rx("SerialPort", candidate);
+                    var candidate = buffer[..exceptionLength];
+                    logger?.Rx("SerialPort", candidate.Span);
 
-                    if (CRC16.ValidateCRC(candidate))
+                    if (CRC16.ValidateCRC(candidate.Span))
                     {
-                        buffer.RemoveRange(0, exceptionLength);
+                        buffer = buffer[exceptionLength..];
                         frame = candidate;
                         return true;
                     }
 
-                    logger?.Warning("The exception response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate[4], candidate[3]);
-                    buffer.RemoveAt(0); // CRC 错，丢弃一个字节继续扫描
+                    logger?.Warning("The exception response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
+                    buffer = buffer[1..]; // CRC 错，丢弃一个字节继续扫描
                     continue;
                 }
 
@@ -321,27 +319,28 @@ namespace Communication.Modbus.Core
                     || functionCode == ModbusFunctionCode.ReadDiscreteInputs
                     || functionCode == ModbusFunctionCode.ReadHodingRegisters || functionCode == ModbusFunctionCode.ReadInputRegisters))
                 {
-                    int byteCount = buffer[2];
+                    int byteCount = buffer.Span[2];
                     var expectedLength = 3 + byteCount + 2;
 
-                    if (buffer.Count < expectedLength)
+                    if (buffer.Length < expectedLength)
                     {
-                        logger?.Warning("The response is not valid : {@buffer}", buffer);
+                        logger?.Warning("The response is not valid : {@buffer}", buffer.ToArray());
                         return false;
                     }
 
-                    var candidate = buffer.Take(expectedLength).ToArray();
-                    logger?.Rx("SerialPort", candidate);
+                    // var candidate = buffer.Take(expectedLength).ToArray();
+                    var candidate = buffer[..expectedLength];
+                    logger?.Rx("SerialPort", candidate.Span);
 
-                    if (CRC16.ValidateCRC(candidate))
+                    if (CRC16.ValidateCRC(candidate.Span))
                     {
-                        buffer.RemoveRange(0, expectedLength);
+                        buffer = buffer[expectedLength..];
                         frame = candidate;
                         return true;
                     }
 
-                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate[4], candidate[3]);
-                    buffer.RemoveAt(0);
+                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
+                    buffer = buffer[1..];
                     continue;
                 }
 
@@ -354,24 +353,25 @@ namespace Communication.Modbus.Core
                 {
                     var expectedLength = 8;
 
-                    if (expectedLength > buffer.Count)
+                    if (expectedLength > buffer.Length)
                     {
-                        logger?.Warning("The response is not valid : {@buffer}", buffer);
+                        logger?.Warning("The response is not valid : {@buffer}", buffer.ToArray());
                         return false;
                     }
 
-                    var candidate = buffer.Take(expectedLength).ToArray();
-                    logger?.Rx("SerialPort", candidate);
+                    // var candidate = buffer.Take(expectedLength).ToArray();
+                    var candidate = buffer[..expectedLength];
+                    logger?.Rx("SerialPort", candidate.Span);
 
-                    if (CRC16.ValidateCRC(candidate))
+                    if (CRC16.ValidateCRC(candidate.Span))
                     {
-                        buffer.RemoveRange(0, expectedLength);
+                        buffer = buffer[expectedLength..];
                         frame = candidate;
                         return true;
                     }
 
-                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate[4], candidate[3]);
-                    buffer.RemoveAt(0);
+                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
+                    buffer = buffer[1..];
                     continue;
                 }
 
@@ -380,34 +380,35 @@ namespace Communication.Modbus.Core
                 {
                     var expectedLength = 6;
 
-                    if (expectedLength > buffer.Count)
+                    if (expectedLength > buffer.Length)
                     {
-                        logger?.Warning("The response is not valid : {@buffer}", buffer);
+                        logger?.Warning("The response is not valid : {@buffer}", buffer.ToArray());
                         return false;
                     }
 
-                    var candidate = buffer.Take(expectedLength).ToArray();
-                    logger?.Rx("SerialPort", candidate);
+                    // var candidate = buffer.Take(expectedLength).ToArray();
+                    var candidate = buffer[..expectedLength];
+                    logger?.Rx("SerialPort", candidate.Span);
 
-                    if (CRC16.ValidateCRC(candidate))
+                    if (CRC16.ValidateCRC(candidate.Span))
                     {
-                        buffer.RemoveRange(0, expectedLength);
+                        buffer = buffer[expectedLength..];
                         frame = candidate;
                         return true;
                     }
 
-                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate[4], candidate[3]);
-                    buffer.RemoveAt(0);
+                    logger?.Warning("The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
+                    buffer = buffer[1..];
                     continue;
                 }
 
                 // 当ID匹配，但是功能码不匹配时，其实这部分还能有点补充，例如 0x07， 0x08， 0x14， 0x15等
-                logger?.Warning("Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", buffer);
-                buffer.RemoveAt(0);
+                logger?.Warning("Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", buffer.ToArray());
+                buffer = buffer[1..];
                 continue;
             }
 
-            logger?.Error("The Rx match failed {@buffer}", buffer);
+            logger?.Error("The Rx match failed {@buffer}", buffer.ToArray());
             return false;
         }
     }
