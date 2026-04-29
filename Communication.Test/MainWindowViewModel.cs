@@ -92,8 +92,13 @@ namespace Communication.Test
         public async Task ExecuteAsync()
         {
 
-            var r = await tcp.ReadCoilsAsync(1,0,4);
+            // var r = await tcp.ReadCoilsAsync(1,0,4);
+            // var r = tcp.ReadCoils(1,0,5);
+            var r = tcp.ReadDiscreteInputs(1,0,5);
             Console.Write(r.ToString());
+  
+
+            //MessageBox.Show(r.ToString());
   
         }
 

@@ -8,7 +8,8 @@ namespace Communication.Modbus.Utils
     {
         public static bool CheckTx(ModbusTx tx)
         {
-            if (tx.Start < 0 || tx.Start > 0xFFFF
+            if (tx.Start < 0 
+                || tx.Start > 0xFFFF
                 || tx.Length < 0
                 || tx.Length > 0xFFFF
                 || tx.SlaveId < 0 || tx.SlaveId > 255
@@ -16,15 +17,9 @@ namespace Communication.Modbus.Utils
                 || tx.FunctionCode > ModbusFunctionCode.WriteMultiHodingRegisters)
                 return false;
 
-            if (tx.FunctionCode >= ModbusFunctionCode.WriteCoil && tx.FunctionCode <= ModbusFunctionCode.WriteMultiHodingRegisters)
-            {
-                if (tx.Data == null || tx.Data.Length <= 0)
-                    return false;
-            }
-
-            //if (tx.ProtocolType != 0x0000) return false;
-
-            return true;
+            if (tx.FunctionCode < ModbusFunctionCode.WriteCoil ||
+                tx.FunctionCode > ModbusFunctionCode.WriteMultiHodingRegisters) return true;
+            return tx.Data != null && tx.Data.Length > 0;
         }
 
         /// <summary>

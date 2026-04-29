@@ -15,6 +15,7 @@
 	  <RepositoryUrl>https://your-repo-url</RepositoryUrl>
 	  <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 	  <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+	  <LangVersion>13</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

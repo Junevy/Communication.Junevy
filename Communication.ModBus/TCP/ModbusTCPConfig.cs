@@ -18,12 +18,12 @@ namespace Communication.Modbus.TCP
         /// <summary>
         /// 写超时时间。
         /// </summary>
-        public int WriteTimeOut { get; set; } = ModbusParams.WRITE_TIMEOUT;
+        public int WriteTimeOut { get; set; } = 20000;
 
         /// <summary>
         /// 读超时时间。
         /// </summary>
-        public int ReadTimeOut { get; set; } = ModbusParams.READ_TIMEOUT;
+        public int ReadTimeOut { get; set; } = 200000;
 
         /// <summary>
         /// 重试次数。
