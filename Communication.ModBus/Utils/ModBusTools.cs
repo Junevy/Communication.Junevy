@@ -111,13 +111,14 @@ namespace Communication.Modbus.Utils
                 .. baseFrame.Take(baseFrame.Length - 2)
             ];
 
-            return frame.ToArray();
+            return [.. frame];
         }
 
         /// <summary>
         /// 解析ModBus接收帧中的线圈数据
         /// </summary>
         /// <param name="frame">ModBus接收帧</param>
+        /// <param name="protocolType">ModBus协议类型</param>
         /// <param name="length">读取线圈数量</param>
         /// <returns>读取到的线圈数据</returns>
         public static bool[] ParseCoils(byte[] frame, ModbusProtocolType protocolType, int length)
@@ -129,11 +130,11 @@ namespace Communication.Modbus.Utils
                 throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
 
             int expectedByteCount = (length + 7) / 8;
-            if (frame.Length < ModbusParams.RTU_BYTECOUNT + expectedByteCount)
+            if (frame.Length < 2 + expectedByteCount)
                 throw new ArgumentException("The rx data is not enough for the requested length.", nameof(frame));
 
             bool[] result = new bool[length];
-            var start = protocolType == ModbusProtocolType.TCP ? ModbusParams.TCP_PDU_START : ModbusParams.RTU_BYTECOUNT;
+            var start = protocolType == ModbusProtocolType.TCP ? 9 : 2;
 
             for (int i = 0; i < length; i++)
             {
@@ -152,14 +153,14 @@ namespace Communication.Modbus.Utils
         /// <param name="rx">ModBus接收帧</param>
         /// <param name="length">读取寄存器数量</param>
         /// <returns>读取到的寄存器数据</returns>
-        public static byte[] ParseRegisters(byte[] rx, ushort length)
+        public static ushort[] ParseRegisters(ReadOnlySpan<byte> rx, ushort length)
         {
-            byte[] result = new byte[length];
+            ushort[] result = new ushort[length];
 
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < length * 2; i += 2)
             {
-                var index = ModbusParams.RTU_BYTECOUNT + i * 2;
-                result[i] = (byte)((rx[index] << 8) | rx[index + 1]);
+                var index = 3 + i;
+                result[i / 2] = (ushort)((rx[index] << 8) | rx[index + 1]);
             }
             return result;
         }

@@ -75,11 +75,11 @@
         /// 将ushort值数组转换为十六进制字符串，高字节在前，低字节在后。
         /// </summary>
         /// <param name="ushorts">需要转为十六进制字符串的ushort值数组</param>
-        /// <param name="reject0X00">是否拒绝0x00在高字节位</param>
+        /// <param name="reject0x00">是否拒绝0x00在高字节位</param>
         /// <returns>转后的十六进制字符串</returns>
-        public static string ToHexString(this ushort[] ushorts, bool reject0X00 = false)
+        public static string ToHexString(this ushort[] ushorts, bool reject0x00 = false)
         {
-            return ToHexString(ushorts.ToByteArrayBigEndian(), reject0X00);
+            return ToHexString(ushorts.ToByteArrayBigEndian(), reject0x00);
         }
 
         /// <summary>
@@ -118,26 +118,26 @@
         /// </summary>
         /// <param name="values">需要解析线圈状态的ushort值数组</param>
         /// <returns>解析后的线圈状态数组</returns>
-        public static byte[] ToMultiCoils(this ushort[] values)
-        {
-            if (values == null || values.Length == 0)
-                return Array.Empty<byte>();
+        // public static byte[] ToMultiCoils(this ushort[] values)
+        // {
+        //     if (values == null || values.Length == 0)
+        //         return Array.Empty<byte>();
 
-            int byteCount = (values.Length + 7) / 8;
-            byte[] result = new byte[byteCount];
+        //     int byteCount = (values.Length + 7) / 8;
+        //     byte[] result = new byte[byteCount];
 
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (values[i] != 0) // 非0即ON
-                {
-                    int byteIndex = i / 8;
-                    int bitIndex = i % 8;
+        //     for (int i = 0; i < values.Length; i++)
+        //     {
+        //         if (values[i] != 0) // 非0即ON
+        //         {
+        //             int byteIndex = i / 8;
+        //             int bitIndex = i % 8;
 
-                    result[byteIndex] |= (byte)(1 << bitIndex);
-                }
-            }
-            return result;
-        }
+        //             result[byteIndex] |= (byte)(1 << bitIndex);
+        //         }
+        //     }
+        //     return result;
+        // }
 
 
         /// <summary>
@@ -145,25 +145,25 @@
         /// </summary>
         /// <param name="txData">需要处理的线圈状态数组</param>
         /// <returns>处理后的线圈状态数组</returns>
-        public static byte[] ToCoils(this byte[] txData)
-        {
-            if (txData == null || txData.Length % 2 != 0)
-                throw new ArgumentException("Tx Data must be even length.");
+        // public static byte[] ToCoils(this byte[] txData)
+        // {
+        //     if (txData == null || txData.Length % 2 != 0)
+        //         throw new ArgumentException("Tx Data must be even length.");
 
-            for (int i = 0; i < txData.Length; i += 2)
-            {
-                byte high = txData[i];
-                byte low = txData[i + 1];
+        //     for (int i = 0; i < txData.Length; i += 2)
+        //     {
+        //         byte high = txData[i];
+        //         byte low = txData[i + 1];
 
-                if (high != 0 || low != 0)   // 只要有一个不为0
-                {
-                    txData[i] = 0xFF;
-                    txData[i + 1] = 0x00;
-                }
-                // else: 都是 0x00，什么都不做，保持原样
-            }
-            return txData;
-        }
+        //         if (high != 0 || low != 0)   // 只要有一个不为0
+        //         {
+        //             txData[i] = 0xFF;
+        //             txData[i + 1] = 0x00;
+        //         }
+        //         // else: 都是 0x00，什么都不做，保持原样
+        //     }
+        //     return txData;
+        // }
 
 
         // public static string 
