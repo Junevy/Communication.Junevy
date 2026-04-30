@@ -1,5 +1,3 @@
-using Communication.Modbus.Core;
-
 namespace Communication.Modbus.TCP
 {
     public class ModbusTCPConfig

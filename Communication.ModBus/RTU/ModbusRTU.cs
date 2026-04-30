@@ -7,18 +7,21 @@ namespace Communication.Modbus.RTU
 {
     public sealed class ModbusRTU(ModbusRTUConfig config) : IModbus
     {
-        private bool disposed = false;
+        private bool disposed;
         private readonly ISerilog? logger = Serilogger.Instance;
 
         public bool IsConnected => serialPort.IsOpen;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.RTU;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
+
         /// <summary>
         /// ModBus 配置参数。
         /// </summary>
         /// <exception cref="ArgumentNullException">当配置参数为 null 时，抛出异常。</exception>
-        public ModbusRTUConfig Config { get; private set; } = config ?? throw new ArgumentNullException(nameof(config) + "is null!");
+        public ModbusRTUConfig Config { get; } = config ??
+                                                 throw new ModbusException(ModbusErrorCode.InvalidValue,
+                                                     nameof(config) + "is null!");
 
         public bool Connect()
         {

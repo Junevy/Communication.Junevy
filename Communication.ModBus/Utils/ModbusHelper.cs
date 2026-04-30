@@ -36,13 +36,13 @@ namespace Communication.Modbus.Utils
         public static byte[] BuildRequestFrame(ModbusRequest request)
         {
             if (!CheckRequest(request))
-                throw new InvalidDataException("Invalid Tx.");
+                throw new ModbusException(ModbusErrorCode.InvalidValue, "Invalid request");
 
             return request.ProtocolType switch
             {
                 ModbusProtocolType.RTU => BuildRtuRequestFrame(request),
                 ModbusProtocolType.TCP => BuildTcpRequestFrame(request),
-                _ => throw new InvalidDataException("The protocol is not supported."),
+                _ => throw new ModbusException(ModbusErrorCode.InvalidValue, "The protocol is not supported.")
             };
         }
 
@@ -53,9 +53,7 @@ namespace Communication.Modbus.Utils
             if (request.FunctionCode >= ModbusFunctionCode.WriteCoil)
             {
                 if (request.Data == null || request.Data.Length <= 0)
-                {
-                    throw new ArgumentException("The data is empty.");
-                }
+                    throw new ModbusException(ModbusErrorCode.InvalidData, "The data is empty.");
 
                 // 构建写入帧（单个写入）
                 if (request.FunctionCode == ModbusFunctionCode.WriteCoil || request.FunctionCode == ModbusFunctionCode.WriteHodingRegister)
@@ -94,7 +92,7 @@ namespace Communication.Modbus.Utils
             }
 
             if (frame.Count == 0)
-                throw new ArgumentException("Check the function code or data.");
+                throw new ModbusException(ModbusErrorCode.InvalidValue, "Check the function code or data.");
 
             Crc16Helper.AddCrc16(frame);
             return [.. frame];
@@ -128,14 +126,15 @@ namespace Communication.Modbus.Utils
         public static bool[] ParseCoils(byte[] response, int length)
         {
             if (response == null)
-                throw new ArgumentNullException(nameof(response), "The rx data cannot be null.");
+                throw new ModbusException(ModbusErrorCode.InvalidData, "The request data cannot be null.");
 
             if (length <= 0)
-                throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
+                throw new ModbusException(ModbusErrorCode.InvalidValue, "Length must be greater than 0.");
 
             int expectedByteCount = (length + 7) / 8;
             if (response.Length < 2 + expectedByteCount)
-                throw new ArgumentException("The rx data is not enough for the requested length.", nameof(response));
+                throw new ModbusException(ModbusErrorCode.InvalidData,
+                    "The rx data is not enough for the requested length.");
 
             bool[] result = new bool[length];
             var start = 3;
@@ -160,13 +159,15 @@ namespace Communication.Modbus.Utils
         public static ushort[] ParseRegisters(byte[] response, int length)
         {
             if (response == null)
-                throw new ArgumentNullException(nameof(response), "The rx data cannot be null.");
+                throw new ModbusException(ModbusErrorCode.InvalidData, "The rx data cannot be null.");
 
             if (length <= 0)
-                throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than 0.");
+                throw new ModbusException(ModbusErrorCode.InvalidData, "Length must be greater than 0.");
 
             if (response.Length < 3 + length * 2)
-                throw new ArgumentException("The rx data is not enough for the requested length.", nameof(response));
+                throw new ModbusException(ModbusErrorCode.InvalidData,
+                    "The rx data is not enough for the requested length.");
+
 
             ushort[] result = new ushort[length];
 

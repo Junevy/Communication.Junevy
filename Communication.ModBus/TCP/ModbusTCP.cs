@@ -129,10 +129,7 @@ namespace Communication.Modbus.TCP
             try
             {
                 var sendResult = Send(tx);
-                if (!sendResult)
-                    return ModbusResult<byte[]>.Fail(" [Request] Send error.");
-
-                return Read(tx);
+                return !sendResult ? ModbusResult<byte[]>.Fail(" [Request] Send error.") : Read(tx);
             }
             catch (Exception ex)
             {
@@ -263,7 +260,8 @@ namespace Communication.Modbus.TCP
                 if (pduLength < 1 || pduLength > 253)
                 {
                     reader.AdvanceTo(headerSeq.End);    // 异常数据，推进 Reader，避免死循环
-                    throw new InvalidDataException($" [ReadAsync] Invalid PDU length: {pduLength}");
+                    throw new ModbusException(ModbusErrorCode.InvalidData,
+                        $" [ReadAsync] Invalid PDU length: {pduLength}");
                 }
 
                 // MBAP + PDU

@@ -8,7 +8,8 @@ namespace Communication.Modbus.RTU
         /// <summary>
         /// 串口名称。
         /// </summary>
-        public string PortName { get; set; } = "COM1" ?? throw new ArgumentNullException(nameof(PortName));
+        public string PortName { get; set; } =
+            "COM1" ?? throw new ModbusException(ModbusErrorCode.GatewayUnavailable, nameof(PortName));
         
         /// <summary>
         /// 波特率。

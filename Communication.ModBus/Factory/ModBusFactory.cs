@@ -31,7 +31,8 @@ namespace Communication.Modbus.Factory
             if (result)
                 socket = tcp;
             else
-                throw new Exception("The Modbus TCP instance already exists!");
+                throw new ModbusException(ModbusErrorCode.GatewayUnavailable,
+                    "The Modbus TCP instance already exists!");
             return result;
         }
 
