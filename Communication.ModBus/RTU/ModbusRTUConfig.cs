@@ -43,22 +43,22 @@ namespace Communication.Modbus.RTU
         /// <summary>
         /// 写超时时间。
         /// </summary>
-        public int WriteTimeOut { get; set; } = ModbusParams.WRITE_TIMEOUT;
+        public int WriteTimeOut { get; set; } = 2000;
 
         /// <summary>
         /// 读超时时间。
         /// </summary>
-        public int ReadTimeOut { get; set; } = ModbusParams.READ_TIMEOUT;
+        public int ReadTimeOut { get; set; } = 2000;
 
         /// <summary>
         /// 重试次数。
         /// </summary>
-        public int RetryCount { get; set; } = ModbusParams.RETRY_COUNT;
+        public int RetryCount { get; set; } = 3;
 
         /// <summary>
         /// 等待报文Rx间隔时间。
         /// </summary>
-        public int IntervalTime { get; set; } = ModbusParams.INTERVAL_TIME;
+        public int IntervalTime { get; set; } = 30;
 
     }
 }

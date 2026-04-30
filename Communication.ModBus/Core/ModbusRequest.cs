@@ -3,7 +3,7 @@ namespace Communication.Modbus.Core
     /// <summary>
     /// ModBus 发送数据类，用于封装 ModBus 发送数据。
     /// </summary>
-    public class ModbusTx
+    public class ModbusRequest
     {
         /// <summary>
         /// 功能码改变事件。
@@ -13,8 +13,7 @@ namespace Communication.Modbus.Core
 
 
         public ushort TransactionId { get; set; } = 0x0000;
-
-
+        
         private ModbusProtocolType protocolType = ModbusProtocolType.TCP;
         public ModbusProtocolType ProtocolType
         {

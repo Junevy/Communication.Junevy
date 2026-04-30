@@ -8,19 +8,13 @@ namespace Communication.Modbus.Extensions
     /// </summary>
     public static class ModbusExtensions
     {
-
         /// <summary>
-        /// 同步读取线圈 (0x01 - Read Coils)
+        /// 通用的同步读取请求（线圈或寄存器）
         /// </summary>
-        public static ModbusResult<bool[]> ReadCoils(this IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode = ModbusFunctionCode.ReadCoils)
+        private static ModbusResult<T[]> ExecuteReadRequest<T>(IModbus modBus, byte slaveId, ushort start, ushort length,
+            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser, string errorPrefix = "ExecuteReadRequest")
         {
-            if (length == 0 || length > 2000)
-                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
-
-            if (funcCode < ModbusFunctionCode.ReadCoils || funcCode > ModbusFunctionCode.ReadDiscreteInputs)
-                throw new InvalidOperationException("Invalid Operation!");
-
-            var tx = new ModbusTx
+            var tx = new ModbusRequest
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -32,31 +26,21 @@ namespace Communication.Modbus.Extensions
             var result = modBus.Request(tx);
             if (result.IsSuccess && result.Data?.Length > 0)
             {
-                var b = ModbusTools.ParseCoils(result.Data, tx.ProtocolType, length);
-                return ModbusResult<bool[]>.Success(b);
+                ReadOnlySpan<byte> slice = modBus.ProtocolType == ModbusProtocolType.TCP ? result.Data.AsMemory().Span[6..] : result.Data.AsMemory().Span;
+                var parsed = parser(slice.ToArray(), length);
+                return ModbusResult<T[]>.Success(parsed);
             }
 
-            return ModbusResult<bool[]>.Fail(result.ErrorMessage ?? "Check sent tx please.");
+            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Check sent tx please.");
         }
 
         /// <summary>
-        /// 异步读取线圈 (0x01 - Read Coils)
+        /// 通用的异步读取请求（线圈或寄存器）
         /// </summary>
-        /// <param name="modBus">IModBus 实例</param>
-        /// <param name="slaveId">从站 ID</param>
-        /// <param name="start">起始地址</param>
-        /// <param name="length">读取数量（线圈数）</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>响应结果</returns>
-        public static async ValueTask<ModbusResult<bool[]>> ReadCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode = ModbusFunctionCode.ReadCoils, CancellationToken cancellationToken = default)
+        private static async ValueTask<ModbusResult<T[]>> ExecuteReadRequestAsync<T>(IModbus modBus, byte slaveId, ushort start, ushort length, 
+            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser, string errorPrefix = "ExecuteReadRequestAsync", CancellationToken cancellationToken = default)
         {
-            if (length == 0 || length > 2000)
-                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
-
-            if (funcCode < ModbusFunctionCode.ReadCoils || funcCode > ModbusFunctionCode.ReadDiscreteInputs)
-                throw new InvalidOperationException("Invalid Operation!");
-
-            var tx = new ModbusTx
+            var tx = new ModbusRequest
             {
                 ProtocolType = modBus.ProtocolType,
                 SlaveId = slaveId,
@@ -68,26 +52,71 @@ namespace Communication.Modbus.Extensions
             var result = await modBus.RequestAsync(tx, cancellationToken);
             if (result.IsSuccess && result.Data?.Length > 0)
             {
-                var b = ModbusTools.ParseCoils(result.Data, tx.ProtocolType, length);
-                return ModbusResult<bool[]>.Success(b);
+                ReadOnlySpan<byte> slice = modBus.ProtocolType == ModbusProtocolType.TCP ? result.Data.AsMemory().Span[6..] : result.Data.AsMemory().Span;
+                var parsed = parser(slice.ToArray(), length);
+                return ModbusResult<T[]>.Success(parsed);
             }
 
-            return ModbusResult<bool[]>.Fail(result.ErrorMessage ?? "Get result failed, check sent tx please.");
+            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Get result failed, check sent tx please.");
         }
 
         /// <summary>
-        /// 同步读取离散输入 (0x02 - Read Discrete Inputs)
+        /// 同步读取线圈 (0x01 - Read Coils)
+        /// </summary>
+        public static ModbusResult<bool[]> ReadCoils(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        {
+            if (length == 0 || length > 2000)
+                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
+
+            return ExecuteReadRequest(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadCoils,
+                ModbusHelper.ParseCoils,
+                " [ReadCoils] ");
+        }
+
+        /// <summary>
+        /// 异步读取线圈 (0x01 - Read Coils)
+        /// </summary>
+        public static async ValueTask<ModbusResult<bool[]>> ReadCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        {
+            if (length == 0 || length > 2000)
+                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
+
+            return await ExecuteReadRequestAsync(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadCoils,
+                ModbusHelper.ParseCoils,
+                " [ReadCoilsAsync] ",
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// 同步读取离散输入 (0x02 - Read Input Registers)
         /// </summary>
         public static ModbusResult<bool[]> ReadDiscreteInputs(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
-            return modBus.ReadCoils(slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs);
+            if (length == 0 || length > 2000)
+                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
+
+            return ExecuteReadRequest(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs,
+                ModbusHelper.ParseCoils,
+                " [ReadDiscreteInputs] ");
         }
 
+        /// <summary>
+        /// 异步读取离散输入 (0x02 - Read Input Registers)
+        /// </summary>
         public static async ValueTask<ModbusResult<bool[]>> ReadDiscreteInputsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
-            return await modBus.ReadCoilsAsync(slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs, cancellationToken);
-        }
+            if (length == 0 || length > 2000)
+                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 2000.");
 
+            return await ExecuteReadRequestAsync(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs,
+                ModbusHelper.ParseCoils,
+                " [ReadDiscreteInputsAsync] ",
+                cancellationToken);
+        }
 
         /// <summary>
         /// 同步读取保持寄存器 (0x03 - Read Holding Registers)
@@ -95,27 +124,13 @@ namespace Communication.Modbus.Extensions
         public static ModbusResult<ushort[]> ReadHoldingRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
         {
             if (length == 0 || length > 125)
-                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
+                throw new ArgumentOutOfRangeException(nameof(length), " [ReadHoldingRegisters] The length must be between 1 and 125.");
 
-            var tx = new ModbusTx
-            {
-                ProtocolType = modBus.ProtocolType,
-                SlaveId = slaveId,
-                FunctionCode = ModbusFunctionCode.ReadHodingRegisters,
-                Start = start,
-                Length = length
-            };
-
-            var result = modBus.Request(tx);
-            if (result.IsSuccess && result.Data?.Length > 0)
-            {
-                var test = ModbusTools.ParseRegisters(result.Data.AsMemory().Span[6..], length);
-                return ModbusResult<ushort[]>.Success(test);
-            }
-
-            return ModbusResult<ushort[]>.Fail(result.ErrorMessage ?? "Check sent tx please.");
+            return ExecuteReadRequest(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
+                ModbusHelper.ParseRegisters,
+                " [ReadHoldingRegisters] ");
         }
-
 
         /// <summary>
         /// 异步读取保持寄存器 (0x03 - Read Holding Registers)
@@ -123,88 +138,47 @@ namespace Communication.Modbus.Extensions
         public static async ValueTask<ModbusResult<ushort[]>> ReadHoldingRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
         {
             if (length == 0 || length > 125)
-                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
+                throw new ArgumentOutOfRangeException(nameof(length), " [ReadHoldingRegistersAsync] The length must be between 1 and 125.");
 
-            var tx = new ModbusTx
-            {
-                ProtocolType = modBus.ProtocolType,
-                SlaveId = slaveId,
-                FunctionCode = ModbusFunctionCode.ReadHodingRegisters,
-                Start = start,
-                Length = length
-            };
-
-            var result = await modBus.RequestAsync(tx, cancellationToken);
-            if (result.IsSuccess && result.Data?.Length > 0)
-            {
-                var test = ModbusTools.ParseRegisters(result.Data.AsMemory().Span[6..], length);
-                return ModbusResult<ushort[]>.Success(test);
-            }
-
-            return ModbusResult<ushort[]>.Fail(result.ErrorMessage ?? "Check sent tx please.");
+            return await ExecuteReadRequestAsync(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
+                ModbusHelper.ParseRegisters, 
+                " [ReadHoldingRegistersAsync] ",
+                cancellationToken);
         }
+
+        /// <summary>
+        /// 同步读取输入寄存器 (0x04 - Read Input Registers)
+        /// </summary>
+        public static ModbusResult<ushort[]> ReadInputRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
+        {
+            if (length == 0 || length > 125)
+                throw new ArgumentOutOfRangeException(nameof(length), " [ReadInputRegisters] The length must be between 1 and 125.");
+
+            return ExecuteReadRequest(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadInputRegisters,
+                ModbusHelper.ParseRegisters,
+                " [ReadInputRegisters] ");
+        }
+
+        /// <summary>
+        /// 异步读取输入寄存器 (0x04 - Read Input Registers)
+        /// </summary>
+        public static async ValueTask<ModbusResult<ushort[]>> ReadInputRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
+        {
+            if (length == 0 || length > 125)
+                throw new ArgumentOutOfRangeException(nameof(length), " [ReadInputRegistersAsync] The length must be between 1 and 125.");
+
+            return await ExecuteReadRequestAsync(
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadInputRegisters,
+                ModbusHelper.ParseRegisters, 
+                " [ReadInputRegistersAsync] ",
+                cancellationToken);
+        }
+
     }
 }
 
-//        /// <summary>
-//        /// 同步读取输入寄存器 (0x04 - Read Input Registers)
-//        /// </summary>
-//        public static ushort[] ReadInputRegisters(this IModbus modBus, byte slaveId, ushort start, ushort length)
-//        {
-//            if (length == 0 || length > 125)
-//                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
-
-//            var tx = new ModbusTx
-//            {
-//                ProtocolType = modBus.ProtocolType,
-//                SlaveId = slaveId,
-//                FunctionCode = ModbusFunctionCode.ReadInputRegisters,
-//                Start = start,
-//                Length = length
-//            };
-
-//            var result = modBus.Request(tx);
-//            if (result.IsSuccess && result.Data != null)
-//            {
-//                result.Data = ModbusTools.ParseRegisters(result.Data, length);
-//                return result;
-//            }
-
-//            return result;
-//        }
-
-//        /// <summary>
-//        /// 异步读取输入寄存器 (0x04 - Read Input Registers)
-//        /// </summary>
-//        /// <param name="modBus">IModBus 实例</param>
-//        /// <param name="slaveId">从站 ID</param>
-//        /// <param name="start">起始地址</param>
-//        /// <param name="length">读取数量（寄存器数）</param>
-//        /// <param name="cancellationToken">取消令牌</param>
-//        /// <returns>响应结果</returns>
-//        public static async Task<ushort[]> ReadInputRegistersAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, CancellationToken cancellationToken = default)
-//        {
-//            if (length == 0 || length > 125)
-//                throw new ArgumentOutOfRangeException(nameof(length), "The length must be between 1 and 125.");
-
-//            var tx = new ModbusTx
-//            {
-//                ProtocolType = modBus.ProtocolType,
-//                SlaveId = slaveId,
-//                FunctionCode = ModbusFunctionCode.ReadInputRegisters,
-//                Start = start,
-//                Length = length
-//            };
-
-//            var result = await modBus.RequestAsync(tx, cancellationToken);
-//            if (result.IsSuccess && result.Data != null)
-//            {
-//                result.Data = ModbusTools.ParseRegisters(result.Data, length);
-//                return result;
-//            }
-
-//            return result;
-//        }
 
 //        /// <summary>
 //        /// 同步写单线圈 (0x05 - Write Single Coil)

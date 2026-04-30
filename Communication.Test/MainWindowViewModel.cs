@@ -40,7 +40,7 @@ namespace Communication.Test
         #endregion
 
         public ModbusRTUConfig Config { get; set; } = new();
-        public ModbusTx Tx { get; set; } = new();
+        public ModbusRequest Tx { get; set; } = new();
 
         public MainWindowViewModel()
         {
@@ -95,7 +95,8 @@ namespace Communication.Test
             // var r = await tcp.ReadCoilsAsync(1,0,4);
             // var r = tcp.ReadCoils(1,0,5);
             // var r = tcp.ReadHoldingRegisters(1,0,5);
-            var r = await tcp.ReadHoldingRegistersAsync(1,0,5);
+            // var r = await tcp.ReadHoldingRegistersAsync(1,0,5);
+            var r = tcp.ReadCoils(1,0,5);
             Console.Write(r.ToString());
   
 
