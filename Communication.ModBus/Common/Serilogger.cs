@@ -1,56 +1,45 @@
-﻿namespace Communication.Modbus.Common
-{
-   /// <summary>
-   /// Logger class.
-   /// </summary>
-   public sealed class Serilogger : IDisposable
-   {
-       private bool disposed = false;
-       private static readonly object loggerLock = new();
-       private static int instanceSet = 0;
+﻿//namespace Communication.Modbus.Common
+//{
+//    public sealed class Serilogger : IDisposable
+//    {
+//        private bool disposed = false;
+//        private static readonly object loggerLock = new();
+//        private static int instanceSet = 0;
 
-       private static volatile ISerilog? instance;
-       public static ISerilog? Instance
-       {
-           get
-           {
-               return instance;
-           }
-       }
+//        private static volatile ISerilog? instance;
+//        public static ISerilog? Instance => instance;
 
-       private Serilogger() { }
 
-       public static void SetInstance(ISerilog logger)
-       {
-           ArgumentNullException.ThrowIfNull(logger);
+//        private Serilogger() { throw new InvalidOperationException("THE CLASS CAN NOT BE CREATE!"); }
 
-           if (Interlocked.CompareExchange(ref instanceSet, 1, 0) != 0)
-           {
-               throw new InvalidOperationException($"{nameof(Instance)} has been initialized!");
-           }
+//        public static void SetInstance(ISerilog logger)
+//        {
+//            ArgumentNullException.ThrowIfNull(logger);
 
-           lock (loggerLock)
-           {
-               if (Instance != null)
-               {
-                   Interlocked.Exchange(ref instanceSet, 0);
-                   throw new InvalidOperationException($"{nameof(Instance)} has been initialized!");
-               }
+//            if (Interlocked.CompareExchange(ref instanceSet, 1, 0) != 0)
+//                throw new InvalidOperationException($"{nameof(Instance)} has been initialized!");
 
-               instance = logger;
-           }
-       }
+//            lock (loggerLock)
+//            {
+//                if (Instance != null)
+//                {
+//                    Interlocked.Exchange(ref instanceSet, 0);
+//                    throw new InvalidOperationException($"{nameof(Instance)} has been initialized!");
+//                }
 
-       public void Dispose()
-       {
-           if (disposed)
-               return;
+//                instance = logger;
+//            }
+//        }
 
-           GC.SuppressFinalize(this);
-           disposed = true;
-           instance = null;
-           Interlocked.Exchange(ref instanceSet, 0);
-       }
+//        public void Dispose()
+//        {
+//            if (disposed)
+//                return;
 
-   }
-}
+//            GC.SuppressFinalize(this);
+//            disposed = true;
+//            instance = null;
+//            Interlocked.Exchange(ref instanceSet, 0);
+//        }
+//    }
+//}

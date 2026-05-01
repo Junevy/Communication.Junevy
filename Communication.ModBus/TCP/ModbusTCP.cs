@@ -2,6 +2,8 @@ using Communication.Modbus.Common;
 using Communication.Modbus.Core;
 using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Buffers;
 using System.IO.Pipelines;
 using System.Net.Sockets;
@@ -14,17 +16,22 @@ namespace Communication.Modbus.TCP
         private NetworkStream stream;
         private PipeReader reader;
 
-        private readonly ISerilog? logger = Serilogger.Instance;
+        private readonly ILogger<ModbusTCP> logger;
         private readonly SemaphoreSlim requestLock = new(1, 1);
         public ModbusTCPConfig Config { get; private set; }
         public bool IsConnected => socket.Connected;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.TCP;
         
-        public ModbusTCP(ModbusTCPConfig config)
+        public ModbusTCP(ModbusTCPConfig config) : this(config, NullLogger<ModbusTCP>.Instance)
+        {
+        }
+
+        public ModbusTCP(ModbusTCPConfig config, ILogger<ModbusTCP> logger)
         {
             ArgumentNullException.ThrowIfNull(config);
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
             this.Config = config;
+            this.logger = logger ?? NullLogger<ModbusTCP>.Instance;
         }
 
         private void InitialSocket(ModbusTCPConfig config)
@@ -59,18 +66,19 @@ namespace Communication.Modbus.TCP
                 {
                     socket.EndConnect(result);
                     InitialStream();
+                    logger.LogDebug(" [Connect] Connect socket successfully to {Address}:{Port}", Config.Address, Config.Port);
                     return true;
                 }
                 else
                 {
                     socket.Close();
-                    logger?.Warning(" [Connect] Connect socket has been timeout: {Config.ConnectTimeout}ms", Config.ConnectTimeout);
+                    logger.LogWarning(" [Connect] Connect socket has been timeout: {Config.ConnectTimeout}ms", Config.ConnectTimeout);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                logger?.Error(" [Connect] Connect socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [Connect] Connect socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
@@ -88,17 +96,17 @@ namespace Communication.Modbus.TCP
             {
                 await socket.ConnectAsync(Config.Address, Config.Port, cancellationToken.Token);
                 InitialStream();
-
+                logger.LogDebug(" [ConnectAsync] Connect socket successfully to {Address}:{Port}", Config.Address, Config.Port);
                 return true;
             }
             catch (OperationCanceledException ex)
             {
-                logger?.Warning(" [ConnectAsync] Connect socket has been timeout : {ex.Message}", ex.Message);
+                logger.LogWarning(" [ConnectAsync] Connect socket has been timeout : {ex.Message}", ex.Message);
                 return false;
             }
             catch (Exception ex)
             {
-                logger?.Error(" [ConnectAsync] Connect socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [ConnectAsync] Connect socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
@@ -108,33 +116,47 @@ namespace Communication.Modbus.TCP
             try
             {
                 socket.Disconnect(false);
+                logger.LogDebug(" [Disconnect] The Connection has been closed: {Address}:{Port}", Config.Address, Config.Port);
             }
             catch (Exception ex)
             {
-                logger?.Error(" [Disconnect] Close socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [Disconnect] Close socket error : {ex.Message}", ex.Message);
                 throw;
             }
         }
         
 
-        public ModbusResult<byte[]> Request(ModbusRequest tx)
+        public ModbusResult<byte[]> Request(ModbusRequest request)
         {
             if (!CheckConnection())
+            {
+                logger.LogWarning(" [Request] Not connected.");
                 return ModbusResult<byte[]>.Fail(" [Request] Not connected.");
+            }
 
-            if (!ModbusHelper.CheckRequest(tx))
-                return ModbusResult<byte[]>.Fail(" [Request] Invalid Tx.");
+            if (!ModbusHelper.CheckRequest(request))
+            {
+                logger.LogWarning(" [Request] Invalid request: {@request}", request);
+                return ModbusResult<byte[]>.Fail(" [Request] Invalid request.");
+            }
 
             requestLock.Wait();
 
             try
             {
-                var sendResult = Send(tx);
-                return !sendResult ? ModbusResult<byte[]>.Fail(" [Request] Send error.") : Read(tx);
+                logger.LogDebug(" [Request] Sending request: {@request}", request);
+                var sendResult = Send(request);
+                if (!sendResult)
+                {
+                    logger.LogWarning(" [Request] Send error");
+                    return ModbusResult<byte[]>.Fail(" [Request] Send error.");
+                }
+
+                return Read(request);
             }
             catch (Exception ex)
             {
-                logger?.Error(" [Request] Request socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [Request] Request socket error: {ex.Message}", ex.Message);
                 throw;
             }
             finally
@@ -147,60 +169,71 @@ namespace Communication.Modbus.TCP
         {
             try
             {
-                var frame = ModbusHelper.BuildRequestFrame(tx);
-
+                var request = ModbusHelper.BuildRequestFrame(tx);
                 int totalSent = 0;
-                while (totalSent < frame.Length)
+                while (totalSent < request.Length)
                 {
-                    int sent = socket.Send(frame, totalSent, frame.Length - totalSent, SocketFlags.None);
+                    int sent = socket.Send(request, totalSent, request.Length - totalSent, SocketFlags.None);
+                    totalSent += sent;
+                    logger.LogDebug(" [Send] Total sent: {totalSent}, current sent: {sent}", totalSent, sent);
+
                     if (sent == 0)
                         return false;
-                    totalSent += sent;
                 }
+                logger.Tx("MobudTCP", request);
                 return true;
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
             {
-                logger?.Warning(" [Send] Send socket has been timeout : {ex.Message}", ex.Message);
+                logger.LogError(" [Send] Send socket has been timeout : {ex.Message}", ex.Message);
                 return false;
             }
             catch (Exception ex)
             {
-                logger?.Error(" [Send] Send socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [Send] Send socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
-        private ModbusResult<byte[]> Read(ModbusRequest tx)
+        private ModbusResult<byte[]> Read(ModbusRequest request)
         {
-            return Task.Run(async () => await ReadAsync(tx)).GetAwaiter().GetResult();
+            return Task.Run(async () => await ReadAsync(request)).GetAwaiter().GetResult();
         }
 
-        public async Task<ModbusResult<byte[]>> RequestAsync(ModbusRequest tx, CancellationToken cancellationToken = default)
+        public async Task<ModbusResult<byte[]>> RequestAsync(ModbusRequest request, CancellationToken cancellationToken = default)
         {
             if (!CheckConnection())
+            {
+                logger.LogWarning(" [RequestAsync] Not connected.");
                 return ModbusResult<byte[]>.Fail(" [RequestAsync] Not connected.");
+            }
 
-            if (!ModbusHelper.CheckRequest(tx))
-                return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid Tx.");
+            if (!ModbusHelper.CheckRequest(request))
+            {
+                logger.LogWarning(" [RequestAsync] Invalid request: {@request}", request);
+                return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid request.");
+            }
 
             try
             {
                 await requestLock.WaitAsync(cancellationToken);
-
-                var sendResult = await SendAsync(tx, cancellationToken);
+                logger.LogDebug(" [RequestAsync] Sending request: {@request}", request);
+                var sendResult = await SendAsync(request, cancellationToken);
                 if (!sendResult)
+                {
+                    logger.LogWarning(" [RequestAsync] Send error");
                     return ModbusResult<byte[]>.Fail(" [RequestAsync] Send error.");
+                }
 
-                return await ReadAsync(tx, cancellationToken);
+                return await ReadAsync(request, cancellationToken);
             }
             catch (OperationCanceledException ex)
             {
-                logger?.Warning(" [RequestAsync] Request socket has been timeout : {ex.Message}", ex.Message);
+                logger.LogError(" [RequestAsync] Request timeout : {ex.Message}", ex.Message);
                 return ModbusResult<byte[]>.Fail(" [RequestAsync] Request timeout.");
             }
             catch (Exception ex)
             {
-                logger?.Error(" [RequestAsync] Request socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [RequestAsync] Request socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
             finally
@@ -209,37 +242,37 @@ namespace Communication.Modbus.TCP
             }
         }
 
-        private async ValueTask<bool> SendAsync(ModbusRequest tx, CancellationToken cancellationToken = default)
+        private async ValueTask<bool> SendAsync(ModbusRequest requestObj, CancellationToken cancellationToken = default)
         {
             try
             {
-                var frame = ModbusHelper.BuildRequestFrame(tx);
-
+                var request = ModbusHelper.BuildRequestFrame(requestObj);
                 using var sendTimeoutToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 sendTimeoutToken.CancelAfter(Config.WriteTimeOut);
                 sendTimeoutToken.Token.ThrowIfCancellationRequested();
 
                 // Ensure all bytes are sent
                 int totalSent = 0;
-                while (totalSent < frame.Length)
+                while (totalSent < request.Length)
                 {
-                    var sent = await socket.SendAsync(frame.AsMemory(totalSent), sendTimeoutToken.Token);
+                    var sent = await socket.SendAsync(request.AsMemory(totalSent), sendTimeoutToken.Token);
+                    totalSent += sent;
+                    logger.LogDebug(" [SendAsync] Total sent: {totalSent}, current sent: {sent}", totalSent, sent);
 
                     if (sent == 0)
                         return false;
-
-                    totalSent += sent;
                 }
+                logger.Tx("ModbusTCP", request);
                 return true;
             }
             catch (OperationCanceledException ex)
             {
-                logger?.Warning(" [SendAsync] Send socket has been timeout : {ex.Message}", ex.Message);
+                logger.LogError(" [SendAsync] Send socket has been timeout : {ex.Message}", ex.Message);
                 return false;
             }
             catch (Exception ex)
             {
-                logger?.Error(" [SendAsync] Send socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [SendAsync] Send socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
@@ -255,7 +288,7 @@ namespace Communication.Modbus.TCP
                 ReadOnlySequence<byte> headerSeq = await ReadExactAsync(6, cts.Token);
                 Span<byte> headerSpan = stackalloc byte[6];
                 headerSeq.CopyTo(headerSpan);
-                
+
                 // 解析 PDU 长度 
                 ushort pduLength = BinaryExtensions.ToUshort(headerSpan[5], headerSpan[4]);
                 if (pduLength < 1 || pduLength > 253)
@@ -267,10 +300,12 @@ namespace Communication.Modbus.TCP
 
                 // MBAP + PDU
                 int totalLength = 6 + pduLength;
+                logger.LogDebug(" [ReadAsync] Total length: {@totalLength}", totalLength);
                 ReadOnlySequence<byte> fullSeq = await ReadExactAsync(totalLength, cts.Token);
 
                 // 处理数据
                 ReadOnlyMemory<byte> data = fullSeq.ToArray();
+                logger.Rx("ModbusTCP", data.Span);
                 reader.AdvanceTo(fullSeq.End); // 消费完整的报文
 
                 var parsed = ResponseParser.ParseResponse(data, tx);
@@ -280,12 +315,12 @@ namespace Communication.Modbus.TCP
             }
             catch (OperationCanceledException ex)
             {
-                logger?.Warning(" [ReadAsync] Read socket has been timeout : {ex.Message}", ex.Message);
+                logger.LogError(" [ReadAsync] Read socket has been timeout : {ex.Message}", ex.Message);
                 return ModbusResult<byte[]>.Fail(" [ReadAsync] Read timeout.");
             }
             catch (Exception ex)
             {
-                logger?.Error(" [ReadAsync] Read socket has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [ReadAsync] Read socket has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
@@ -314,14 +349,14 @@ namespace Communication.Modbus.TCP
                     reader.AdvanceTo(buffer.Start, buffer.End); // 未消费，等待更多数据
                 }
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException)
             {
-                logger?.Warning(" [ReadExactAsync] The connection has been closed.");
+                logger.LogError(" [ReadExactAsync] The connection has been closed.");
                 throw;
             }
             catch (Exception ex)
             {
-                logger?.Error(" [ReadExactAsync] ReadExact has been occured an error : {ex.Message}", ex.Message);
+                logger.LogError(" [ReadExactAsync] ReadExact has been occured an error : {ex.Message}", ex.Message);
                 throw;
             }
         }
@@ -332,7 +367,7 @@ namespace Communication.Modbus.TCP
         {
             socket?.Dispose();
             requestLock?.Dispose();
-            logger?.Information(" [ModbusTCP] ModbusTCPMaster has been disposed.");
+            logger.LogDebug(" [ModbusTCP] ModbusTCPMaster has been disposed.");
         }
 
     }

@@ -1,6 +1,4 @@
-﻿using System.Buffers;
-
-namespace Communication.Modbus.Core
+﻿namespace Communication.Modbus.Core
 {
     /// <summary>
     /// ModBus 响应数据类，用于封装 ModBus 响应数据。
@@ -18,7 +16,7 @@ namespace Communication.Modbus.Core
         /// 响应数据
         /// </summary>
         public T? Data { get; set; }
-        
+
         /// <summary>
         /// 错误信息。
         /// </summary>
@@ -30,9 +28,9 @@ namespace Communication.Modbus.Core
         /// <param name="data">响应数据。</param>
         /// <returns>成功响应对象。</returns>
         /// <param name="rawData">原始响应数据。</param>
-        public static ModbusResult<T> Success(T data) 
+        public static ModbusResult<T> Success(T data)
             => new() { IsSuccess = true, Data = data };
-        
+
         /// <summary>
         /// 失败响应。
         /// </summary>

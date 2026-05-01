@@ -1,15 +1,13 @@
-﻿using Communication.Modbus.Core;
-using Communication.Modbus.Common;
+﻿using Communication.Modbus.Common;
+using Communication.Modbus.Core;
+using Communication.Modbus.Extensions;
+using Communication.Modbus.Factory;
 using Communication.Modbus.RTU;
-using Communication.Modbus.Utils;
+using Communication.Modbus.TCP;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO.Ports;
-using System.Windows;
-using Communication.Modbus.TCP;
-using Communication.Modbus.Factory;
-using Communication.Modbus.Extensions;
 
 namespace Communication.Test
 {
@@ -17,7 +15,8 @@ namespace Communication.Test
     {
         private readonly ModbusRTU mr;
         private IModbus tcp;
-        
+        private IModbusFactory factory;
+
         private bool isConnected = false;
         public bool IsConnected
         {
@@ -42,12 +41,10 @@ namespace Communication.Test
         public ModbusRTUConfig Config { get; set; } = new();
         public ModbusRequest Tx { get; set; } = new();
 
-        public MainWindowViewModel()
+        public MainWindowViewModel(IModbusFactory factory)
         {
-            Logger log = new();
-            Serilogger.SetInstance(log);
-
             this.mr = new ModbusRTU(Config);
+            this.factory = factory;
 
             // 监听功能码变化, 对应DataGrid的变化
             Tx.OnFunctionCodeChanged += (f) =>
@@ -82,12 +79,13 @@ namespace Communication.Test
         [RelayCommand]
         public void Connect()
         {
-            ModbusFactory factory = new();
-            var result = factory.TryAdd("test", new ModbusTCPConfig(), out tcp);
-            if (result)
-                _ = tcp?.Connect();
+            //ModbusFactory factory = new();
+            //var result = factory.TryAdd("test", new ModbusTCPConfig(), out tcp);
+            this.tcp = factory.GetOrAdd("test", new ModbusTCPConfig());
+            tcp.Connect();
+            //if (result)
+            //    _ = tcp?.Connect();
 
-            // mr.Connect();
         }
 
 
@@ -118,13 +116,13 @@ namespace Communication.Test
             // Console.Write(r.ToString());
 
             // byte[] test = r
-  
-            var r =await tcp.WriteMultipleRegistersAsync(1, 2, new ushort[5] {123, 1, 123, 1, 0});
+
+            var r = await tcp.WriteMultipleRegistersAsync(1, 2, [123, 1, 123, 1, 0]);
             Console.Write(r.ToString());
 
 
             //MessageBox.Show(r.ToString());
-  
+
         }
 
         [RelayCommand]

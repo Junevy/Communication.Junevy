@@ -11,23 +11,26 @@ namespace Communication.Modbus.Factory
     {
         private readonly ConcurrentDictionary<string, IModbus> modbusList = new();
         private readonly ILogger<ModbusFactory> logger;
+        private readonly ILoggerFactory loggerFactory;
+
         private bool disposed;
 
         public int Count => modbusList.Count;
-
         public IEnumerable<string> Keys => modbusList.Keys;
 
-        public ModbusFactory()
-            : this(NullLogger<ModbusFactory>.Instance)
+        public ModbusFactory() 
+               : this(NullLogger<ModbusFactory>.Instance, NullLoggerFactory.Instance)
         {
         }
 
-        public ModbusFactory(ILogger<ModbusFactory> logger)
+        public ModbusFactory(ILogger<ModbusFactory> logger, ILoggerFactory loggerFactory)
         {
             this.logger = logger ?? NullLogger<ModbusFactory>.Instance;
+            this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+
+            ResponseParser.SetLogger(this.loggerFactory);
         }
 
-        // ── Get / GetRequired ────────────────────
 
         public IModbus? Get(string key)
         {
@@ -47,7 +50,6 @@ namespace Communication.Modbus.Factory
                 $"Modbus instance '{key}' not found or type mismatch. Expected {typeof(TResult).Name}.");
         }
 
-        // ── GetOrAdd TCP ────────────────────────
 
         public IModbus GetOrAdd(string key, ModbusTCPConfig config)
         {
@@ -57,7 +59,7 @@ namespace Communication.Modbus.Factory
 
             return modbusList.GetOrAdd(key, _ =>
             {
-                var tcp = new ModbusTCP(config);
+                var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>());
                 logger.LogDebug("Created ModbusTCP: key={Key}", key);
                 return tcp;
             });
@@ -73,7 +75,7 @@ namespace Communication.Modbus.Factory
 
             return modbusList.GetOrAdd(key, _ =>
             {
-                var rtu = new ModbusRTU(config);
+                var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>());
                 logger.LogDebug("Created ModbusRTU: key={Key}", key);
                 return rtu;
             });

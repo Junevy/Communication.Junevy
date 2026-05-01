@@ -1,4 +1,4 @@
-﻿using Communication.Modbus.Common;
+﻿using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace Communication.Modbus.Common
@@ -28,11 +28,11 @@ namespace Communication.Modbus.Common
             return hex;
         }
 
-        public static void Tx(this ISerilog logger, string ip, byte[] data)
+        public static void Tx(this ILogger logger, string ip, byte[] data)
         {
             long now = sw.ElapsedMilliseconds;
 
-            logger.Debug(
+            logger.LogDebug(
                 "[TX] [{IP}] --> {Data}",
                 ip,
                 data.ToHex()
@@ -44,12 +44,12 @@ namespace Communication.Modbus.Common
         ///// <summary>
         ///// 格式接收日志（自动计算时间差）
         ///// </summary>
-        public static void Rx(this ISerilog logger, string ip, ReadOnlySpan<byte> data)
+        public static void Rx(this ILogger logger, string ip, ReadOnlySpan<byte> data)
         {
             long now = sw.ElapsedMilliseconds;
             long delta = now - lastTimestamp;
 
-            logger.Debug(
+            logger.LogDebug(
                 "[RX] [{IP}] <-- {Data} (+{Delta} ms)",
                 ip,
                 data.ToArray().ToHex(),

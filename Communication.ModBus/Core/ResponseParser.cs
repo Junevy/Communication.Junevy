@@ -1,10 +1,12 @@
 ﻿using Communication.Modbus.Common;
 using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Communication.Modbus.Core
 {
-    public static class ResponseParser
+    internal static class ResponseParser
     {
         private const int RtuMinFrameLength = 5;
         private const int RtuPduOffset = 0;
@@ -12,7 +14,9 @@ namespace Communication.Modbus.Core
         private const int TcpMinFrameLength = 9;
         private const int TcpPduOffset = 6;
 
-        private static readonly ISerilog? logger = Serilogger.Instance;
+        private static ILogger logger = NullLogger.Instance;
+        private static bool isLoggerInitialized = false;
+        private readonly static SemaphoreSlim loggerLock = new(1,1);
 
         private enum FunctionCodeCategory
         {
@@ -32,6 +36,31 @@ namespace Communication.Modbus.Core
                 return FunctionCodeCategory.WriteMulti;
             return FunctionCodeCategory.Unknown;
         }
+
+        internal static void SetLogger(ILoggerFactory loggerFactory)
+        {
+            try
+            {
+                loggerLock.Wait();
+
+                if (!isLoggerInitialized)
+                {
+                    logger = loggerFactory.CreateLogger(nameof(ResponseParser));
+                    isLoggerInitialized = true;
+                }
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+            finally
+            {
+                isLoggerInitialized = true;
+                loggerLock.Release();
+                logger.LogDebug("Logger has been initialized.");
+            }
+        }
+
 
         public static ModbusResult<ReadOnlyMemory<byte>> ParseResponse(ReadOnlyMemory<byte> response, ModbusRequest request)
         {
@@ -58,9 +87,12 @@ namespace Communication.Modbus.Core
                 expectedByteCount = (length + 7) / 8;
 
             if (byteCount == expectedByteCount)
+            {
+                logger.LogInformation(" [VerifyReadPdu] Read successful");
                 return true;
+            }
 
-            logger?.Error(" [VerifyReadRx] Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}", expectedByteCount, byteCount);
+            logger.LogWarning(" [VerifyReadPdu] Byte count mismatch. Expected {expectedByteCount}, actual {byteCount}", expectedByteCount, byteCount);
             return false;
         }
 
@@ -69,13 +101,13 @@ namespace Communication.Modbus.Core
             var startAdr = BinaryExtensions.ToUshort(pdu[3], pdu[2]);
             if (startAdr != startAddress)
             {
-                logger?.Error(" [VerifyEchoRx] The start address error : {startAddress}, and {actualStartAddress}", startAddress, startAdr);
+                logger.LogWarning(" [VerifySingleWritePdu] The start address error: {startAddress}, and {actualStartAddress}", startAddress, startAdr);
                 return false;
             }
 
             if (data.Length != 2)
             {
-                logger?.Error(" [VerifyEchoRx] The data length is invalid!{dataLength}", data.Length);
+                logger.LogWarning(" [VerifySingleWritePdu] The data length is invalid: {dataLength}", data.Length);
                 return false;
             }
 
@@ -88,17 +120,18 @@ namespace Communication.Modbus.Core
             var start = BinaryExtensions.ToUshort(pdu[3], pdu[2]);
             if (start != startAddress)
             {
-                logger?.Error(" [VerifyMultiWriteRx] The start address error. Actual {start}, expected {startAddress}", start, startAddress);
+                logger.LogWarning(" [VerifyMultiWritePdu] The start address error. Actual {start}, expected {startAddress}", start, startAddress);
                 return false;
             }
 
             var dataLength = BinaryExtensions.ToUshort(pdu[5], pdu[4]);
             if (dataLength != length)
             {
-                logger?.Error(" [VerifyMultiWriteRx] The length error. Actual {dataLength}, expected {length}", dataLength, length);
+                logger.LogWarning(" [VerifyMultiWritePdu] The length error. Actual {dataLength}, expected {length}", dataLength, length);
                 return false;
             }
 
+            logger.LogInformation(" [VerifyMultiWritePdu] Write multiple successful");
             return true;
         }
         #endregion
@@ -111,7 +144,7 @@ namespace Communication.Modbus.Core
         {
             if (response.Length < TcpMinFrameLength)
             {
-                logger?.Warning(" [TryExtractTcpRx] The response is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The response is not valid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The response is not valid", response);
             }
 
@@ -122,22 +155,25 @@ namespace Communication.Modbus.Core
 
             if (protocolId != 0x00)
             {
-                logger?.Warning(" [TryExtractTcpRx] Invalid protocol ID: {protocolId}, and span : {@span}", protocolId, response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] Invalid protocol ID: {protocolId}, and span : {@response}", protocolId, response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail($"Invalid protocol ID: {protocolId}.", response);
             }
 
             if (unitId != slaveID)
-                logger?.Warning(" [TryExtractTcpRx] The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, and span : {@span}", unitId, slaveID, response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, and span : {@response}", unitId, slaveID, response);
 
             int totalLength = TcpPduOffset + frameLength;
             if (response.Length < totalLength)
             {
-                logger?.Warning(" [TryExtractTcpRx] Invalid response length. Actual {span.Length}, expected {totalLength}, and span : {@span}", response.Length, totalLength, response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] Invalid response length. Actual {span.Length}, expected {totalLength}, and span : {@response}", response.Length, totalLength, response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail($" [TryExtractTcpRx] Invalid response length. Actual {response.Length}, expected {totalLength}.", response);
             }
             
             if (funcCode == (byte)((byte)functionCode | 0x80))  // 异常验证
+            {
+                logger.LogWarning(" [] Exception code: {exception code}", funcCode);
                 return ModbusResult<ReadOnlyMemory<byte>>.Success(response);
+            }
 
             return CategorizeFunctionCode(functionCode) switch
             {
@@ -163,7 +199,7 @@ namespace Communication.Modbus.Core
 
             if (response.Length < expectedLength)
             {
-                logger?.Warning(" [TryExtractTcpRx] The response is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The response is not valid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The response is not valid", response);
             }
 
@@ -172,7 +208,7 @@ namespace Communication.Modbus.Core
 
             if (!VerifyReadPdu(pduSpan, functionCode, length))
             {
-                logger?.Warning(" [TryExtractTcpRx] The response is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The response is not valid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The response is not valid", response);
             }
 
@@ -185,7 +221,7 @@ namespace Communication.Modbus.Core
         {
             if (data == null || data.Length == 0 || response.Length < pduOffset + 6)
             {
-                logger?.Warning(" [TryExtractTcpRx] The data length is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The data length is invalid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The data length is not valid", response);
             }
 
@@ -193,7 +229,7 @@ namespace Communication.Modbus.Core
 
             if (!VerifySingleWritePdu(pduSpan, startAddr, data))
             {
-                logger?.Warning(" [TryExtractTcpRx] The response is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The response is invalid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The response is not valid", response);
             }
 
@@ -208,7 +244,7 @@ namespace Communication.Modbus.Core
 
             if (!VerifyMultiWritePdu(pduSpan, startAddr, length))
             {
-                logger?.Warning(" [TryExtractTcpRx] The response is not valid : {@span}", response.ToArray());
+                logger.LogWarning(" [TryExtractTcpRx] The response is not valid : {@response}", response);
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The response is not valid", response);
             }
 
@@ -218,7 +254,7 @@ namespace Communication.Modbus.Core
 
         private static ModbusResult<ReadOnlyMemory<byte>> DefaultUnmatchedTcp(ReadOnlyMemory<byte> response)
         {
-            logger?.Rx(" [TryExtractTcpRx] TCP", response.Span);
+            logger.Rx(" [TryExtractTcpRx] TCP", response.Span);
             return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The function code cannot be matched.", response);
         }
 
@@ -236,7 +272,7 @@ namespace Communication.Modbus.Core
 
                 if (id != slaveID)
                 {
-                    logger?.Warning(" [TryExtractRtuRx] The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, remove it and continue.", id, slaveID);
+                    logger.LogWarning(" [TryExtractRtuRx] The actual slave is not matched. Actual {slaveId}, expected {expectedSlaveId}, remove it and continue.", id, slaveID);
                     response = response[1..];
                     continue;
                 }
@@ -256,7 +292,7 @@ namespace Communication.Modbus.Core
 
                 if (category == FunctionCodeCategory.Unknown)
                 {
-                    logger?.Warning(" [TryExtractRtuRx] Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", response.ToArray());
+                    logger.LogWarning(" [TryExtractRtuRx] Rx length match success, but Rx is not matched. {@response}, remove first byte and continue.", response.ToArray());
                     response = response[1..];
                     continue;
                 }
@@ -284,8 +320,8 @@ namespace Communication.Modbus.Core
                 return payloadResult;
             }
 
-            logger?.Error(" [TryExtractRtuRx] The Rx match failed {@buffer}", response.ToArray());
-            return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] The Rx match failed", response);
+            logger.LogError(" [TryExtractRtuRx] The response match failed {@response}", response);
+            return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] The response match failed", response);
         }
 
 
@@ -295,7 +331,7 @@ namespace Communication.Modbus.Core
 
             if (exceptionLength > response.Length)
             {
-                logger?.Error(" [TryExtractRtuRx] The exception response length is not matched. Actual {length}, expected {expectedLength} and buffer : {@buffer}", response.Length, exceptionLength, response.ToArray());
+                logger.LogWarning(" [TryExtractRtuRx] The exception response length is not matched. Actual {length}, expected {expectedLength} and buffer : {@buffer}", response.Length, exceptionLength, response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
                     $"The exception response length is not matched. Actual {response.Length}, expected {exceptionLength} and buffer : {response}",
                     response), false);
@@ -304,11 +340,11 @@ namespace Communication.Modbus.Core
             var candidate = response[..exceptionLength];
             if (Crc16Helper.VerifyCrc(candidate.Span))
             {
-                logger?.Rx("SerialPort", candidate.Span);
+                logger.Rx("SerialPort", candidate.Span);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate), false);
             }
 
-            logger?.Warning(" [TryExtractRtuRx] The exception response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
+            logger.LogWarning(" [TryExtractRtuRx] The exception response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[4], candidate.Span[3]);
             return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] The exception response CRC error.", candidate), true);
         }
 
@@ -320,7 +356,7 @@ namespace Communication.Modbus.Core
 
             if (response.Length < expectedLength)
             {
-                logger?.Warning(" [TryExtractRtuRx] The response is not valid : {@buffer}", response.ToArray());
+                logger.LogWarning(" [TryExtractRtuRx] The response is not valid : {@response}", response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
                     $" [TryExtractRtuRx] The response is not valid : {response}", response), false);
             }
@@ -329,17 +365,17 @@ namespace Communication.Modbus.Core
 
             if (!VerifyReadPdu(candidate.Span, functionCode, length))
             {
-                logger?.Warning("The response is not valid : {@buffer}", response.ToArray());
+                logger.LogWarning("The response is not valid : {@response}", response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail("The response is not valid", response), true);
             }
 
             if (Crc16Helper.VerifyCrc(candidate.Span))
             {
-                logger?.Rx("SerialPort", candidate.Span);
+                logger.Rx("SerialPort", candidate.Span);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate), false);
             }
 
-            logger?.Warning(" [TryExtractRtuRx] The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[^2], candidate.Span[^1]);
+            logger.LogWarning(" [TryExtractRtuRx] The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[^2], candidate.Span[^1]);
             return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] The response CRC error.", candidate), true);
         }
 
@@ -348,14 +384,14 @@ namespace Communication.Modbus.Core
         {
             if (data == null || data.Length == 0 || response.Length < 8)
             {
-                logger?.Warning(" [TryExtractRtuRx] The data length is not valid : {@buffer}", response.ToArray());
+                logger.LogWarning(" [TryExtractRtuRx] The data length is not valid : {@response}", response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
                     " [TryExtractRtuRx] The data length is not valid", response), false);
             }
 
             if (!VerifySingleWritePdu(response.Span, startAddr, data))
             {
-                logger?.Warning(" [TryExtractRtuRx] The response is not valid : {@buffer}", response.ToArray());
+                logger.LogWarning(" [TryExtractRtuRx] The response is not valid : {@response}", response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
                     " [TryExtractRtuRx] The response is not valid", response), true);
             }
@@ -364,11 +400,11 @@ namespace Communication.Modbus.Core
 
             if (Crc16Helper.VerifyCrc(candidate.Span))
             {
-                logger?.Rx("SerialPort", candidate.Span);
+                logger.Rx("SerialPort", candidate.Span);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate), false);
             }
 
-            logger?.Warning(" [TryExtractRtuRx] The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[^2], candidate.Span[^1]);
+            logger.LogWarning(" [TryExtractRtuRx] The response CRC error. High byte: {crcHigh}, Low byte: {crcLow}, remove it and continue.", candidate.Span[^2], candidate.Span[^1]);
             return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] The response CRC error.", candidate), true);
         }
 
@@ -377,7 +413,7 @@ namespace Communication.Modbus.Core
         {
             if (!VerifyMultiWritePdu(response.Span[..8], startAddr, length))
             {
-                logger?.Warning(" [TryExtractRtuRx] The response is not valid : {@buffer}", response.ToArray());
+                logger.LogWarning(" [TryExtractRtuRx] The response is not valid : {@response}", response);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
                     " [TryExtractRtuRx] The response is not valid", response), true);
             }
@@ -387,7 +423,7 @@ namespace Communication.Modbus.Core
 
         private static ModbusResult<ReadOnlyMemory<byte>> DefaultUnmatchedRtu(ReadOnlyMemory<byte> response)
         {
-            logger?.Warning(" [TryExtractRtuRx] Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", response.ToArray());
+            logger.LogWarning(" [TryExtractRtuRx] Rx length match success, but Rx is not matched. {@response}, remove first byte and continue.", response);
             return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] Rx length match success, but Rx is not matched.", response);
         }
 

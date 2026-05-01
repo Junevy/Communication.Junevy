@@ -7,10 +7,10 @@ namespace Communication.Test
     /// </summary>
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        public MainWindow(MainWindowViewModel vm)
         {
             InitializeComponent();
-            MainWindowViewModel vm = new();
+            //MainWindowViewModel vm = new(App.Current.pro);
             this.DataContext = vm;
         }
     }
