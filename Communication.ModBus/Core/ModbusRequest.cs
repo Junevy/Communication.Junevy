@@ -34,7 +34,7 @@ namespace Communication.Modbus.Core
         /// <summary>
         /// 功能码。
         /// </summary>
-        private ModbusFunctionCode functionCode = ModbusFunctionCode.WriteMultiHodingRegisters;
+        private ModbusFunctionCode functionCode = ModbusFunctionCode.WriteMultipleHodingRegisters;
         public ModbusFunctionCode FunctionCode 
         {
             get => functionCode;

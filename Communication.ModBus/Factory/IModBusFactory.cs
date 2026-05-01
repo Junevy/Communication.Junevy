@@ -1,18 +1,32 @@
 using Communication.Modbus.Core;
-using Communication.Modbus.TCP;
 using Communication.Modbus.RTU;
+using Communication.Modbus.TCP;
 
 namespace Communication.Modbus.Factory
 {
-    /// <summary>
-    /// ModBus 工厂接口，用于创建 ModBus 实例。
-    /// </summary>
-    public interface IModbusFactory
+    public interface IModbusFactory : IDisposable, IAsyncDisposable
     {
-        public bool TryGetMosbus(out IModbus? modbus, string key);
+        int Count { get; }
 
-        public bool TryAddModbus(out IModbus? socket, ModbusTCPConfig config, string? key = null);
+        IModbus? Get(string key);
 
-        public bool TryAddModbus(out IModbus? socket, ModbusRTUConfig config, string? key = null);
+        TResult GetRequired<TResult>(string key) where TResult : class, IModbus;
+
+        IEnumerable<string> Keys { get; }
+
+        IModbus GetOrAdd(string key, ModbusTCPConfig config);
+
+        IModbus GetOrAdd(string key, ModbusRTUConfig config);
+
+        bool TryRemove(string key);
+
+        bool TryGet(string key, out IModbus? modbus);
+
+        bool TryAdd(string key, ModbusTCPConfig config, out IModbus? modbus);
+
+        bool TryAdd(string key, ModbusRTUConfig config, out IModbus? modbus);
     }
 }
+
+
+

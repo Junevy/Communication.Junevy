@@ -8,7 +8,7 @@
         ReadInputRegisters = 0x04,
         WriteCoil = 0x05,
         WriteHodingRegister = 0x06,
-        WriteMultiCoils = 0x0F,
-        WriteMultiHodingRegisters = 0x10,
+        WriteMultipleCoils = 0x0F,
+        WriteMultipleHodingRegisters = 0x10,
     }
 }

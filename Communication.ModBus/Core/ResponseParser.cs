@@ -28,7 +28,7 @@ namespace Communication.Modbus.Core
                 return FunctionCodeCategory.Read;
             if (functionCode >= ModbusFunctionCode.WriteCoil && functionCode <= ModbusFunctionCode.WriteHodingRegister)
                 return FunctionCodeCategory.WriteSingle;
-            if (functionCode >= ModbusFunctionCode.WriteMultiCoils && functionCode <= ModbusFunctionCode.WriteMultiHodingRegisters)
+            if (functionCode >= ModbusFunctionCode.WriteMultipleCoils && functionCode <= ModbusFunctionCode.WriteMultipleHodingRegisters)
                 return FunctionCodeCategory.WriteMulti;
             return FunctionCodeCategory.Unknown;
         }

@@ -19,11 +19,11 @@ namespace Communication.Modbus.Utils
                 || request.Length > 0xFFFF
                 || request.SlaveId < 0 || request.SlaveId > 255
                 || request.FunctionCode < ModbusFunctionCode.ReadCoils
-                || request.FunctionCode > ModbusFunctionCode.WriteMultiHodingRegisters)
+                || request.FunctionCode > ModbusFunctionCode.WriteMultipleHodingRegisters)
                 return false;
 
             if (request.FunctionCode < ModbusFunctionCode.WriteCoil ||
-                request.FunctionCode > ModbusFunctionCode.WriteMultiHodingRegisters) return true;
+                request.FunctionCode > ModbusFunctionCode.WriteMultipleHodingRegisters) return true;
             return request.Data != null && request.Data.Length > 0;
         }
 
@@ -73,7 +73,7 @@ namespace Communication.Modbus.Utils
                         (byte) request.FunctionCode,
                         .. request.Start.ToBigEndian(),
                         .. request.Length.ToBigEndian(),
-                        (byte)  (request.FunctionCode == ModbusFunctionCode.WriteMultiCoils
+                        (byte)  (request.FunctionCode == ModbusFunctionCode.WriteMultipleCoils
                                     ? (request.Length + 7) / 8 : (request.Length * 2) ),
                         .. request.Data,
                     ];

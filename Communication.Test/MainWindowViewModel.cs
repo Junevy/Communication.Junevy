@@ -83,7 +83,7 @@ namespace Communication.Test
         public void Connect()
         {
             ModbusFactory factory = new();
-            var result = factory.TryAddModbus(out tcp, new ModbusTCPConfig(), "test");
+            var result = factory.TryAdd("test", new ModbusTCPConfig(), out tcp);
             if (result)
                 _ = tcp?.Connect();
 

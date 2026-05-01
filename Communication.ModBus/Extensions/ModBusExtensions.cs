@@ -326,7 +326,7 @@ namespace Communication.Modbus.Extensions
             }
 
             return ExecuteWriteRequest(
-                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultiCoils, data);
+                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultipleCoils, data);
         }
 
         /// <summary>
@@ -356,7 +356,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteWriteRequestAsync(
                 modBus, slaveId, start, (ushort)values.Length,
-                ModbusFunctionCode.WriteMultiCoils, data, cancellationToken);
+                ModbusFunctionCode.WriteMultipleCoils, data, cancellationToken);
         }
 
         /// <summary>
@@ -377,7 +377,7 @@ namespace Communication.Modbus.Extensions
             byte[] data = values.ToBigEndianByteArray();
 
             return ExecuteWriteRequest(
-                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultiHodingRegisters, data);
+                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultipleHodingRegisters, data);
         }
 
         /// <summary>
@@ -400,7 +400,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteWriteRequestAsync(
                 modBus, slaveId, start, (ushort)values.Length,
-                ModbusFunctionCode.WriteMultiHodingRegisters, data, cancellationToken);
+                ModbusFunctionCode.WriteMultipleHodingRegisters, data, cancellationToken);
         }
     }
 }
