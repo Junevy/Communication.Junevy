@@ -21,7 +21,7 @@ namespace Communication.Modbus.Core
             WriteMulti,
             Unknown
         }
-        
+
         private static FunctionCodeCategory CategorizeFunctionCode(ModbusFunctionCode functionCode)
         {
             if (functionCode >= ModbusFunctionCode.ReadCoils && functionCode <= ModbusFunctionCode.ReadInputRegisters)
@@ -41,19 +41,12 @@ namespace Communication.Modbus.Core
             if (!ModbusHelper.CheckRequest(request))
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [ParseResponse] The request is invalid.");
 
-            var verifiedResult = request.ProtocolType == ModbusProtocolType.TCP
+            return request.ProtocolType == ModbusProtocolType.TCP
                 ? TryExtractTcpResponse(response, request.SlaveId, request.Length, request.Start, request.FunctionCode, request.Data ?? [])
                 : TryExtractRtuResponse(response, request.SlaveId, request.Length, request.Start, request.FunctionCode, request.Data ?? []);
-
-            if (!verifiedResult.IsSuccess)
-            {
-                logger?.Error(" [ParseResponse] Extract frame failed: {@extractFrame}", response);
-                return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [ParseResponse] Extract frame failed", response);
-            }
-
-            return verifiedResult;
         }
 
+        #region Common methods
         private static bool VerifyReadPdu(ReadOnlySpan<byte> pdu, ModbusFunctionCode functionCode, ushort length)
         {
             int expectedByteCount;
@@ -108,10 +101,10 @@ namespace Communication.Modbus.Core
 
             return true;
         }
+        #endregion
 
-        // ──────────────────────────────────────────────
-        //  TCP response extraction
-        // ──────────────────────────────────────────────
+
+        #region TCP response extraction
 
         private static ModbusResult<ReadOnlyMemory<byte>> TryExtractTcpResponse(ReadOnlyMemory<byte> response, byte slaveID, ushort length,
             ushort startAddr, ModbusFunctionCode functionCode, byte[] data)
@@ -125,6 +118,7 @@ namespace Communication.Modbus.Core
             ushort protocolId = BinaryExtensions.ToUshort(response.Span[3], response.Span[2]);
             ushort frameLength = BinaryExtensions.ToUshort(response.Span[5], response.Span[4]);
             byte unitId = response.Span[6];
+            byte funcCode = response.Span[7];
 
             if (protocolId != 0x00)
             {
@@ -141,6 +135,9 @@ namespace Communication.Modbus.Core
                 logger?.Warning(" [TryExtractTcpRx] Invalid response length. Actual {span.Length}, expected {totalLength}, and span : {@span}", response.Length, totalLength, response.ToArray());
                 return ModbusResult<ReadOnlyMemory<byte>>.Fail($" [TryExtractTcpRx] Invalid response length. Actual {response.Length}, expected {totalLength}.", response);
             }
+            
+            if (funcCode == (byte)((byte)functionCode | 0x80))  // 异常验证
+                return ModbusResult<ReadOnlyMemory<byte>>.Success(response);
 
             return CategorizeFunctionCode(functionCode) switch
             {
@@ -182,6 +179,7 @@ namespace Communication.Modbus.Core
             return ModbusResult<ReadOnlyMemory<byte>>.Success(cutFrame);
         }
 
+
         private static ModbusResult<ReadOnlyMemory<byte>> HandleTcpWriteSingle(ReadOnlyMemory<byte> response, int pduOffset,
             ushort startAddr, byte[] data)
         {
@@ -202,6 +200,7 @@ namespace Communication.Modbus.Core
             return ModbusResult<ReadOnlyMemory<byte>>.Success(response);
         }
 
+
         private static ModbusResult<ReadOnlyMemory<byte>> HandleTcpWriteMulti(ReadOnlyMemory<byte> response, int pduOffset,
             ushort startAddr, ushort length)
         {
@@ -216,18 +215,21 @@ namespace Communication.Modbus.Core
             return ModbusResult<ReadOnlyMemory<byte>>.Success(response);
         }
 
+
         private static ModbusResult<ReadOnlyMemory<byte>> DefaultUnmatchedTcp(ReadOnlyMemory<byte> response)
         {
             logger?.Rx(" [TryExtractTcpRx] TCP", response.Span);
             return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractTcpRx] The function code cannot be matched.", response);
         }
 
+        #endregion
 
 
+        #region RTU response extraction
         private static ModbusResult<ReadOnlyMemory<byte>> TryExtractRtuResponse(ReadOnlyMemory<byte> response, byte slaveID, ushort length,
             ushort startAddr, ModbusFunctionCode functionCode, byte[] data)
         {
-            while (response.Length > RtuMinFrameLength)
+            while (response.Length >= RtuMinFrameLength)
             {
                 var id = response.Span[0];
                 var funcCode = response.Span[1];
@@ -240,8 +242,7 @@ namespace Communication.Modbus.Core
                 }
 
                 // Exception response
-                byte exceptionCode = (byte)((byte)functionCode | 0x80);
-                if (funcCode == exceptionCode)
+                if (funcCode == (byte)((byte)functionCode | 0x80))
                 {
                     var (exceptionResult, shouldRetry) = HandleRtuException(response);
                     if (!shouldRetry)
@@ -389,5 +390,7 @@ namespace Communication.Modbus.Core
             logger?.Warning(" [TryExtractRtuRx] Rx length match success, but Rx is not matched. {@Buffer}, remove first byte and continue.", response.ToArray());
             return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [TryExtractRtuRx] Rx length match success, but Rx is not matched.", response);
         }
+
+        #endregion
     }
 }

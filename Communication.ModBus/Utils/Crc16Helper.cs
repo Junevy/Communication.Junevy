@@ -14,12 +14,11 @@ namespace Communication.Modbus.Utils
         /// <returns>bool类型的校验结果</returns>
         public static bool VerifyCrc(byte[] frame)
         {
-            var dataWithoutCRC = frame.Take(frame.Length - 2).ToArray();
-            var receivedCRC = frame.Skip(frame.Length - 2).ToArray();
+            var dataWithoutCRC = frame[..^2];
+            var receivedCRC = frame[^2..];
             var calculatedCRC = CrcLittleEndian(dataWithoutCRC);
             return receivedCRC.SequenceEqual(calculatedCRC);
         }
-
 
         /// <summary>
         /// 验证ReadOnlySpan<byte> 值的CRC16校验码是否正确
@@ -28,8 +27,8 @@ namespace Communication.Modbus.Utils
         /// <returns>bool类型的校验结果</returns>
         public static bool VerifyCrc(ReadOnlySpan<byte> frame)
         {
-            var dataWithoutCRC = frame.Slice(0, frame.Length - 2);
-            var receivedCRC = frame.Slice(frame.Length - 2, frame.Length);
+            var dataWithoutCRC = frame[..^2];
+            var receivedCRC = frame[^2..];
             var calculatedCRC = CrcLittleEndian(dataWithoutCRC);
             return receivedCRC.SequenceEqual(calculatedCRC);
         }

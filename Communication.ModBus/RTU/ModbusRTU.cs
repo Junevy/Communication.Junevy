@@ -18,11 +18,12 @@ namespace Communication.Modbus.RTU
         /// <summary>
         /// ModBus 配置参数。
         /// </summary>
-        /// <exception cref="ArgumentNullException">当配置参数为 null 时，抛出异常。</exception>
+        /// <exception cref="ModbusException">当配置参数为 null 时，抛出异常。</exception>
         public ModbusRTUConfig Config { get; } = config ??
                                                  throw new ModbusException(ModbusErrorCode.InvalidValue,
                                                      nameof(config) + "is null!");
 
+        // 连接功能，连接至com口
         public bool Connect()
         {
             ThrowIfDisposed();
@@ -41,11 +42,15 @@ namespace Communication.Modbus.RTU
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                return false;
+                throw;
             }
             return true;
         }
 
+        /// <summary>
+        /// 异步连接功能，实际使用Task.run方式运行
+        /// </summary>
+        /// <returns>异步任务，任务完成时返回连接成功</returns>
         public Task<bool> ConnectAsync()
         {
             // SerialPort doesn't have an async Open method, so we run it on a thread pool thread
@@ -117,7 +122,7 @@ namespace Communication.Modbus.RTU
             catch (Exception ex)
             {
                 logger?.Error(" [Request] Execute request error!", ex);
-                return ModbusResult<byte[]>.Fail(ex.Message);
+                throw;
             }
             finally
             {
@@ -148,43 +153,49 @@ namespace Communication.Modbus.RTU
             catch (Exception ex)
             {
                 logger?.Error(" [Send] Execute request error!", ex);
-                return false;
+                throw;
             }
         }
 
         private ModbusResult<byte[]> Read(ModbusRequest request)
         {
-             var pool = System.Buffers.ArrayPool<byte>.Shared.Rent(256);
+            var pool = System.Buffers.ArrayPool<byte>.Shared.Rent(256);
+            int readCounts = 0;
 
             try
             {
                 while (true)
                 {
-                    int count = 0;
+                    int readBytes = 0;
                     try
                     {
-                        count = this.serialPort.Read(pool, 0, pool.Length);
+                        readBytes = this.serialPort.Read(pool, readCounts, pool.Length - readCounts);
+                        readCounts += readBytes;
                     }
                     catch (TimeoutException)
                     {
                         logger?.Error(" [Read] Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
                         return ModbusResult<byte[]>.Fail($" [Read] Read savle timeout: ({Config.ReadTimeOut}ms)");
                     }
-                    if (count < 5) continue;
 
-                    var memory = pool.AsMemory(0, count);
+                    logger?.Debug(" [Read] Read count: {Count}", readCounts);
+
+                    if (readCounts < 5) continue;
+                    var memory = pool.AsMemory(0, readCounts);
 
                     // 尝试解析 Modbus 帧
                     var parseResult = ResponseParser.ParseResponse(memory, request);
+
+                    // 正常帧
                     if (parseResult.IsSuccess)
                     {
                         logger?.Information(" [Read] Try parse frame success: {@Rx.Data}", parseResult.Data);
                         if (parseResult.Data.Length <= 0)
                         {
                             logger?.Warning(" [Read] Parse frame failed, because the data length < 0 : {@Rx.Data}", parseResult.Data);
-                            throw new InvalidOperationException(" [Read] Parse frame failed.");
+                            throw new ModbusException(ModbusErrorCode.InvalidData, " [Read] Parse frame failed.");
                         }
-                        return ModbusResult<byte[]>.Success(parseResult.Data.Span.ToArray());
+                        return ModbusResult<byte[]>.Success(parseResult.Data.ToArray());
                     }
 
                     // 等待读取完整的一帧
@@ -195,7 +206,7 @@ namespace Communication.Modbus.RTU
             catch (Exception e)
             {
                 logger?.Error(" [Read] Receive response error: {e.Message}", e.Message);
-                return ModbusResult<byte[]>.Fail(e.Message);
+                throw;
             }
             finally
             {
@@ -218,7 +229,7 @@ namespace Communication.Modbus.RTU
                 logger?.Warning(" [RequestAsync] Port not open: {Config.PortName}.", Config.PortName);
                 return ModbusResult<byte[]>.Fail("Port not open");
             }
-            
+
             if (!ModbusHelper.CheckRequest(request))
                 return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid Tx.", request.Data);
 
@@ -234,7 +245,7 @@ namespace Communication.Modbus.RTU
             catch (Exception ex)
             {
                 logger?.Error(" [RequestAsync] Execute request error!", ex);
-                return ModbusResult<byte[]>.Fail(ex.Message);
+                throw;
             }
             finally
             {
@@ -255,8 +266,8 @@ namespace Communication.Modbus.RTU
             try
             {
                 byte[] requestFrame = ModbusHelper.BuildRequestFrame(request);
-
                 token.ThrowIfCancellationRequested();
+
                 // 清除串口区缓存
                 this.serialPort.DiscardInBuffer();
                 this.serialPort.DiscardOutBuffer();
@@ -278,7 +289,7 @@ namespace Communication.Modbus.RTU
             catch (Exception ex)
             {
                 logger?.Error(" [SendAsync] Execute request error!", ex);
-                return false;
+                throw;
             }
         }
 
@@ -290,9 +301,8 @@ namespace Communication.Modbus.RTU
         /// <returns>执行结果</returns>
         private async Task<ModbusResult<byte[]>> ReadAsync(ModbusRequest request, CancellationToken token = default)
         {
-            // var buffer = new List<byte>(256);
-            // var temp = new byte[256];
             var pool = System.Buffers.ArrayPool<byte>.Shared.Rent(256);
+            int readCounts = 0;
 
             try
             {
@@ -301,12 +311,12 @@ namespace Communication.Modbus.RTU
                 while (true)
                 {
                     readTimeoutToken.Token.ThrowIfCancellationRequested();
-
-                    int count = 0;
+                    int readBytes = 0;
                     try
                     {
                         //实现串口的 2000ms ReadTimeout，且在等待期间不阻塞主线程
-                        count = await Task.Run(() => this.serialPort.Read(pool, 0, pool.Length), readTimeoutToken.Token);
+                        readBytes = await Task.Run(() => this.serialPort.Read(pool, readCounts, pool.Length - readCounts), readTimeoutToken.Token);
+                        readCounts += readBytes;
                     }
                     catch (TimeoutException)
                     {
@@ -314,10 +324,9 @@ namespace Communication.Modbus.RTU
                         return ModbusResult<byte[]>.Fail($" [ReadAsync] Read savle timeout: ({Config.ReadTimeOut}ms)");
                     }
 
-                    if (count < 5) continue;
+                    if (readCounts < 5) continue;
+                    var memory = pool.AsMemory(0, readCounts);
 
-                    // buffer.AddRange(pool.AsSpan(0, count));
-                    var memory = pool.AsMemory(0, count);
                     // 尝试解析 Modbus 帧
                     var parseResult = ResponseParser.ParseResponse(memory, request);
                     if (parseResult.IsSuccess)
@@ -346,7 +355,11 @@ namespace Communication.Modbus.RTU
             catch (Exception e)
             {
                 logger?.Error(" [ReadAsync] Receive response error: {e.Message}", e.Message);
-                return ModbusResult<byte[]>.Fail(e.Message);
+                throw;
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<byte>.Shared.Return(pool);
             }
         }
 

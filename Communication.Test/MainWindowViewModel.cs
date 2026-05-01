@@ -86,7 +86,10 @@ namespace Communication.Test
             var result = factory.TryAddModbus(out tcp, new ModbusTCPConfig(), "test");
             if (result)
                 _ = tcp?.Connect();
+
+            // mr.Connect();
         }
+
 
         [RelayCommand]
         public async Task ExecuteAsync()
@@ -96,9 +99,29 @@ namespace Communication.Test
             // var r = tcp.ReadCoils(1,0,5);
             // var r = tcp.ReadHoldingRegisters(1,0,5);
             // var r = await tcp.ReadHoldingRegistersAsync(1,0,5);
-            var r = tcp.ReadCoils(1,0,5);
-            Console.Write(r.ToString());
+            // var r = tcp.ReadCoils(1,0,5);
+            // var r = tcp.WriteSingleCoil(1, 0, true);
+            // var r = await tcp.WriteSingleCoilAsync(1, 0, true);
+
+            // var r = await tcp.WriteMultipleCoilsAsync(1, 0, new bool[5] {true, false, true, false, true});
+            // var r = tcp.WriteSingleRegister(1, 2, 100);
+            // var r = await tcp.WriteSingleRegisterAsync(1, 2, 100);
+
+            // var r = await tcp.WriteMultipleRegistersAsync(1, 2, new ushort[5] {100, 200, 300, 400, 500});
+
+            // var r = mr.ReadCoils(1,0,5);
+            // var r = await mr.ReadDiscreteInputsAsync(1,0,5);
+
+            // var r = mr.ReadHoldingRegisters(1,0,5);
+
+            // var r = await mr.WriteMultipleRegistersAsync(1, 0, new ushort[5] {123, 1, 123, 1, 0});
+            // Console.Write(r.ToString());
+
+            // byte[] test = r
   
+            var r =await tcp.WriteMultipleRegistersAsync(1, 2, new ushort[5] {123, 1, 123, 1, 0});
+            Console.Write(r.ToString());
+
 
             //MessageBox.Show(r.ToString());
   

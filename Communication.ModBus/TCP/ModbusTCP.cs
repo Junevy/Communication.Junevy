@@ -26,7 +26,7 @@ namespace Communication.Modbus.TCP
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
             this.Config = config;
         }
-        
+
         private void InitialSocket(ModbusTCPConfig config)
         {
             socket.ReceiveTimeout = config.ReadTimeOut;
@@ -71,7 +71,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [Connect] Connect socket has been occured an error : {ex.Message}", ex.Message);
-                return false;
+                throw;
             }
         }
 
@@ -99,7 +99,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [ConnectAsync] Connect socket has been occured an error : {ex.Message}", ex.Message);
-                return false;
+                throw;
             }
         }
         
@@ -111,7 +111,8 @@ namespace Communication.Modbus.TCP
             }
             catch (Exception ex)
             {
-                logger?.Warning(" [Disconnect] Close socket has been occured an error : {ex.Message}", ex.Message);
+                logger?.Error(" [Disconnect] Close socket has been occured an error : {ex.Message}", ex.Message);
+                throw;
             }
         }
         
@@ -134,7 +135,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [Request] Request socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<byte[]>.Fail(" [Request] Request error.");
+                throw;
             }
             finally
             {
@@ -166,7 +167,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [Send] Send socket has been occured an error : {ex.Message}", ex.Message);
-                return false;
+                throw;
             }
         }
         private ModbusResult<byte[]> Read(ModbusRequest tx)
@@ -200,7 +201,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [RequestAsync] Request socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<byte[]>.Fail(" [RequestAsync] Request error.");
+                throw;
             }
             finally
             {
@@ -239,7 +240,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [SendAsync] Send socket has been occured an error : {ex.Message}", ex.Message);
-                return false;
+                throw;
             }
         }
 
@@ -274,8 +275,8 @@ namespace Communication.Modbus.TCP
 
                 var parsed = ResponseParser.ParseResponse(data, tx);
                 return parsed.IsSuccess
-                    ? ModbusResult<byte[]>.Success(parsed.Data.Span.ToArray())
-                    : ModbusResult<byte[]>.Fail(parsed?.ErrorMessage ?? " [ReadAsync] Parse error");
+                    ? ModbusResult<byte[]>.Success(parsed.Data.ToArray())
+                    : ModbusResult<byte[]>.Fail(parsed?.ErrorMessage ?? " [ReadAsync] Parse error", data.ToArray());
             }
             catch (OperationCanceledException ex)
             {
@@ -285,7 +286,7 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger?.Error(" [ReadAsync] Read socket has been occured an error : {ex.Message}", ex.Message);
-                return ModbusResult<byte[]>.Fail(" [ReadAsync] Read error");
+                throw;
             }
         }
 

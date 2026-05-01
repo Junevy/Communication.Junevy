@@ -12,7 +12,7 @@ namespace Communication.Modbus.Extensions
         /// 通用的同步读取请求
         /// </summary>
         private static ModbusResult<T[]> ExecuteReadRequest<T>(IModbus modBus, byte slaveId, ushort start, ushort length,
-            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser, string errorPrefix = "ExecuteReadRequest")
+            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser)
         {
             var tx = new ModbusRequest
             {
@@ -27,18 +27,23 @@ namespace Communication.Modbus.Extensions
             if (result.IsSuccess && result.Data?.Length > 0)
             {
                 ReadOnlySpan<byte> slice = modBus.ProtocolType == ModbusProtocolType.TCP ? result.Data.AsMemory().Span[6..] : result.Data.AsMemory().Span;
+
+                // 异常验证
+                if ((byte)(slice[1] & 0x80) >= 0x80)
+                    return ModbusResult<T[]>.Fail($"Exception code: {slice[1]}");
+
                 var parsed = parser(slice.ToArray(), length);
                 return ModbusResult<T[]>.Success(parsed);
             }
 
-            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Check sent tx please.");
+            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" Check sent tx please.");
         }
 
         /// <summary>
         /// 通用的异步读取请求
         /// </summary>
         private static async ValueTask<ModbusResult<T[]>> ExecuteReadRequestAsync<T>(IModbus modBus, byte slaveId, ushort start, ushort length,
-            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser, string errorPrefix = "ExecuteReadRequestAsync", CancellationToken cancellationToken = default)
+            ModbusFunctionCode funcCode, Func<byte[], int, T[]> parser, CancellationToken cancellationToken = default)
         {
             var tx = new ModbusRequest
             {
@@ -53,17 +58,21 @@ namespace Communication.Modbus.Extensions
             if (result.IsSuccess && result.Data?.Length > 0)
             {
                 ReadOnlySpan<byte> slice = modBus.ProtocolType == ModbusProtocolType.TCP ? result.Data.AsMemory().Span[6..] : result.Data.AsMemory().Span;
+                // 异常验证
+                if ((byte)(slice[1] & 0x80) >= 0x80)
+                    return ModbusResult<T[]>.Fail($"Exception code: {slice[1]}");
+
                 var parsed = parser(slice.ToArray(), length);
                 return ModbusResult<T[]>.Success(parsed);
             }
 
-            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Get result failed, check sent tx please.");
+            return ModbusResult<T[]>.Fail(result.ErrorMessage ?? $" Get result failed, check sent request please.");
         }
 
         /// <summary>
         /// 通用的同步写入请求
         /// </summary>
-        private static ModbusResult<byte[]> ExecuteWriteRequest(IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode, byte[] data, string errorPrefix)
+        private static ModbusResult<byte[]> ExecuteWriteRequest(IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode, byte[] data)
         {
             var tx = new ModbusRequest
             {
@@ -76,17 +85,26 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = modBus.Request(tx);
+            var pduOffset = modBus.ProtocolType == ModbusProtocolType.TCP ? 6 : 0;
             if (result.IsSuccess && result.Data?.Length > 0)
-                return ModbusResult<byte[]>.Success(result.Data);
+            {
+                if ((byte)(result.Data[pduOffset + 1] & 0x80) >= 0x80)  // 异常码
+                {
+                    result.IsSuccess = false;
+                    result.ErrorMessage = $"Exception code: {result.Data[pduOffset + 1]}";
+                    return result;
+                }
+                return result;
+            }
 
-            return ModbusResult<byte[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Check sent tx please.");
+            return result;
         }
 
         /// <summary>
         /// 通用的异步写入请求
         /// </summary>
-        private static async ValueTask<ModbusResult<byte[]>> ExecuteWriteRequestAsync(IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode, 
-            byte[] data, string errorPrefix, CancellationToken cancellationToken = default)
+        private static async ValueTask<ModbusResult<byte[]>> ExecuteWriteRequestAsync(IModbus modBus, byte slaveId, ushort start, ushort length, ModbusFunctionCode funcCode,
+            byte[] data, CancellationToken cancellationToken = default)
         {
             var tx = new ModbusRequest
             {
@@ -99,10 +117,19 @@ namespace Communication.Modbus.Extensions
             };
 
             var result = await modBus.RequestAsync(tx, cancellationToken);
+            var pduOffset = modBus.ProtocolType == ModbusProtocolType.TCP ? 6 : 0;
             if (result.IsSuccess && result.Data?.Length > 0)
-                return ModbusResult<byte[]>.Success(result.Data);
+            {
+                if ((byte)(result.Data[pduOffset + 1] & 0x80) >= 0x80)  // 异常码
+                {
+                    result.IsSuccess = false;
+                    result.ErrorMessage = $"Exception code: {result.Data[pduOffset + 1]}";
+                    return result;
+                }
+                return result;
+            }
 
-            return ModbusResult<byte[]>.Fail(result.ErrorMessage ?? $" {errorPrefix} Get result failed, check sent tx please.");
+            return result;
         }
 
 
@@ -116,8 +143,7 @@ namespace Communication.Modbus.Extensions
 
             return ExecuteReadRequest(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadCoils,
-                ModbusHelper.ParseCoils,
-                " [ReadCoils] ");
+                ModbusHelper.ParseCoils);
         }
 
         /// <summary>
@@ -130,9 +156,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteReadRequestAsync(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadCoils,
-                ModbusHelper.ParseCoils,
-                " [ReadCoilsAsync] ",
-                cancellationToken);
+                ModbusHelper.ParseCoils, cancellationToken);
         }
 
         /// <summary>
@@ -145,8 +169,7 @@ namespace Communication.Modbus.Extensions
 
             return ExecuteReadRequest(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs,
-                ModbusHelper.ParseCoils,
-                " [ReadDiscreteInputs] ");
+                ModbusHelper.ParseCoils);
         }
 
         /// <summary>
@@ -159,9 +182,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteReadRequestAsync(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadDiscreteInputs,
-                ModbusHelper.ParseCoils,
-                " [ReadDiscreteInputsAsync] ",
-                cancellationToken);
+                ModbusHelper.ParseCoils, cancellationToken);
         }
 
         /// <summary>
@@ -174,8 +195,7 @@ namespace Communication.Modbus.Extensions
 
             return ExecuteReadRequest(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
-                ModbusHelper.ParseRegisters,
-                " [ReadHoldingRegisters] ");
+                ModbusHelper.ParseRegisters);
         }
 
         /// <summary>
@@ -188,9 +208,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteReadRequestAsync(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
-                ModbusHelper.ParseRegisters,
-                " [ReadHoldingRegistersAsync] ",
-                cancellationToken);
+                ModbusHelper.ParseRegisters, cancellationToken);
         }
 
         /// <summary>
@@ -203,8 +221,7 @@ namespace Communication.Modbus.Extensions
 
             return ExecuteReadRequest(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadInputRegisters,
-                ModbusHelper.ParseRegisters,
-                " [ReadInputRegisters] ");
+                ModbusHelper.ParseRegisters);
         }
 
         /// <summary>
@@ -217,9 +234,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteReadRequestAsync(
                 modBus, slaveId, start, length, ModbusFunctionCode.ReadInputRegisters,
-                ModbusHelper.ParseRegisters,
-                " [ReadInputRegistersAsync] ",
-                cancellationToken);
+                ModbusHelper.ParseRegisters, cancellationToken);
         }
 
         /// <summary>
@@ -234,10 +249,7 @@ namespace Communication.Modbus.Extensions
         {
             byte[] data = [(byte)(value ? 0xFF : 0x00), 0x00];
 
-            return ExecuteWriteRequest(
-                modBus, slaveId, start, 1,
-                ModbusFunctionCode.WriteCoil, data,
-                " [WriteSingleCoil] ");
+            return ExecuteWriteRequest(modBus, slaveId, start, 1, ModbusFunctionCode.WriteCoil, data);
         }
 
         /// <summary>
@@ -253,11 +265,7 @@ namespace Communication.Modbus.Extensions
         {
             byte[] data = [(byte)(value ? 0xFF : 0x00), 0x00];
 
-            return await ExecuteWriteRequestAsync(
-                modBus, slaveId, start, 1,
-                ModbusFunctionCode.WriteCoil, data,
-                " [WriteSingleCoilAsync] ",
-                cancellationToken);
+            return await ExecuteWriteRequestAsync(modBus, slaveId, start, 1, ModbusFunctionCode.WriteCoil, data, cancellationToken);
         }
 
         /// <summary>
@@ -272,10 +280,7 @@ namespace Communication.Modbus.Extensions
         {
             byte[] data = value.ToBigEndian();
 
-            return ExecuteWriteRequest(
-                modBus, slaveId, start, 1,
-                ModbusFunctionCode.WriteHodingRegister, data,
-                " [WriteSingleRegister] ");
+            return ExecuteWriteRequest(modBus, slaveId, start, 1, ModbusFunctionCode.WriteHodingRegister, data);
         }
 
         /// <summary>
@@ -292,10 +297,7 @@ namespace Communication.Modbus.Extensions
             byte[] data = value.ToBigEndian();
 
             return await ExecuteWriteRequestAsync(
-                modBus, slaveId, start, 1,
-                ModbusFunctionCode.WriteHodingRegister, data,
-                " [WriteSingleRegisterAsync] ",
-                cancellationToken);
+                modBus, slaveId, start, 1, ModbusFunctionCode.WriteHodingRegister, data, cancellationToken);
         }
 
 
@@ -309,28 +311,22 @@ namespace Communication.Modbus.Extensions
         /// <param name="values">线圈值数组</param>
         /// <returns>写入操作结果对象</returns>
         /// <exception cref="ModbusException">地址/数量/值非法</exception>
-        public static ModbusResult<byte[]> WriteMultipleCoils(this IModbus modBus, byte slaveId, ushort start, ushort length, bool[] values)
+        public static ModbusResult<byte[]> WriteMultipleCoils(this IModbus modBus, byte slaveId, ushort start, bool[] values)
         {
-            if (length == 0 || length > 1968)
+            if (values == null || values.Length == 0 || values.Length > 1968)
                 throw new ModbusException(ModbusErrorCode.InvalidQuantity,
                     " [WriteMultipleCoils] The coil quantity must be between 1 and 1968.");
 
-            if (values == null || values.Length != length)
-                throw new ModbusException(ModbusErrorCode.InvalidData,
-                    " [WriteMultipleCoils] The values array must match the specified length.");
-
-            int byteCount = (length + 7) / 8;
+            int byteCount = (values.Length + 7) / 8;
             byte[] data = new byte[byteCount];
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < values.Length; i++)
             {
                 if (values[i])
                     data[i / 8] |= (byte)(1 << (i % 8));
             }
 
             return ExecuteWriteRequest(
-                modBus, slaveId, start, length,
-                ModbusFunctionCode.WriteMultiCoils, data,
-                " [WriteMultipleCoils] ");
+                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultiCoils, data);
         }
 
         /// <summary>
@@ -344,29 +340,23 @@ namespace Communication.Modbus.Extensions
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>写入操作结果对象</returns>
         /// <exception cref="ModbusException">地址/数量/值非法</exception>
-        public static async ValueTask<ModbusResult<byte[]>> WriteMultipleCoilsAsync(this IModbus modBus, byte slaveId, ushort start, ushort length, bool[] values, CancellationToken cancellationToken = default)
+        public static async ValueTask<ModbusResult<byte[]>> WriteMultipleCoilsAsync(this IModbus modBus, byte slaveId, ushort start, bool[] values, CancellationToken cancellationToken = default)
         {
-            if (length == 0 || length > 1968)
-                throw new ModbusException(ModbusErrorCode.InvalidQuantity,
-                    " [WriteMultipleCoilsAsync] The coil quantity must be between 1 and 1968.");
-
-            if (values == null || values.Length != length)
+            if (values == null || values.Length <= 0 || values.Length > 1968)
                 throw new ModbusException(ModbusErrorCode.InvalidData,
                     " [WriteMultipleCoilsAsync] The values array must match the specified length.");
 
-            int byteCount = (length + 7) / 8;
+            int byteCount = (values.Length + 7) / 8;
             byte[] data = new byte[byteCount];
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < values.Length; i++)
             {
                 if (values[i])
                     data[i / 8] |= (byte)(1 << (i % 8));
             }
 
             return await ExecuteWriteRequestAsync(
-                modBus, slaveId, start, length,
-                ModbusFunctionCode.WriteMultiCoils, data,
-                " [WriteMultipleCoilsAsync] ",
-                cancellationToken);
+                modBus, slaveId, start, (ushort)values.Length,
+                ModbusFunctionCode.WriteMultiCoils, data, cancellationToken);
         }
 
         /// <summary>
@@ -387,9 +377,7 @@ namespace Communication.Modbus.Extensions
             byte[] data = values.ToBigEndianByteArray();
 
             return ExecuteWriteRequest(
-                modBus, slaveId, start, (ushort)values.Length,
-                ModbusFunctionCode.WriteMultiHodingRegisters, data,
-                " [WriteMultipleRegisters] ");
+                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultiHodingRegisters, data);
         }
 
         /// <summary>
@@ -412,9 +400,7 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteWriteRequestAsync(
                 modBus, slaveId, start, (ushort)values.Length,
-                ModbusFunctionCode.WriteMultiHodingRegisters, data,
-                " [WriteMultipleRegistersAsync] ",
-                cancellationToken);
+                ModbusFunctionCode.WriteMultiHodingRegisters, data, cancellationToken);
         }
     }
 }

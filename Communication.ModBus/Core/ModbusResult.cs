@@ -12,6 +12,8 @@ namespace Communication.Modbus.Core
         /// </summary>
         public bool IsSuccess { get; set; }
 
+        // public bool IsException { get; set; } = false;
+
         /// <summary>
         /// 响应数据
         /// </summary>
@@ -28,7 +30,8 @@ namespace Communication.Modbus.Core
         /// <param name="data">响应数据。</param>
         /// <returns>成功响应对象。</returns>
         /// <param name="rawData">原始响应数据。</param>
-        public static ModbusResult<T> Success(T data) => new() { IsSuccess = true, Data = data };
+        public static ModbusResult<T> Success(T data) 
+            => new() { IsSuccess = true, Data = data };
         
         /// <summary>
         /// 失败响应。
@@ -37,8 +40,9 @@ namespace Communication.Modbus.Core
         /// <param name="data">响应数据。</param>
         /// <returns>失败响应对象。</returns>
         public static ModbusResult<T> Fail(string errMsg, T? data = default)
-        {
-            return new() { IsSuccess = false, ErrorMessage = errMsg, Data = data };
-        }
+            => new() { IsSuccess = false, ErrorMessage = errMsg, Data = data };
+
+        // public static ModbusResult<T> Exception(string errMsg, T? data = default)
+        //     => new() { IsSuccess = false, IsException = true, ErrorMessage = errMsg, Data = data };
     }
 }
