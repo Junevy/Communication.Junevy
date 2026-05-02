@@ -1,7 +1,7 @@
-using Communication.Modbus.Common;
 using Communication.Modbus.Core;
 using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
+using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Buffers;

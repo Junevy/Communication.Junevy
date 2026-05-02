@@ -1,6 +1,6 @@
-﻿using Communication.Modbus.Common;
-using Communication.Modbus.Extensions;
+﻿using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
+using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 

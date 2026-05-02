@@ -1,10 +1,9 @@
-﻿using Communication.Modbus.Common;
-using Communication.Modbus.Core;
+﻿using Communication.Modbus.Core;
 using Communication.Modbus.Utils;
+using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.IO.Ports;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Communication.Modbus.RTU
 {

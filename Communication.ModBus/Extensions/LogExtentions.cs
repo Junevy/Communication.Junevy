@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
-namespace Communication.Modbus.Common
+namespace Communication.ModBus.Extensions
 {
     public static class LogExtentions
     {

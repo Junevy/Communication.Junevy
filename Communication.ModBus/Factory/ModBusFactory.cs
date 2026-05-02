@@ -65,7 +65,6 @@ namespace Communication.Modbus.Factory
             });
         }
 
-        // ── GetOrAdd RTU ────────────────────────
 
         public IModbus GetOrAdd(string key, ModbusRTUConfig config)
         {
@@ -81,7 +80,6 @@ namespace Communication.Modbus.Factory
             });
         }
 
-        // ── TryGet ──────────────────────────────
 
         public bool TryGet(string key, out IModbus? modbus)
         {
@@ -92,7 +90,6 @@ namespace Communication.Modbus.Factory
             return modbusList.TryGetValue(key, out modbus);
         }
 
-        // ── TryAdd TCP ──────────────────────────
 
         public bool TryAdd(string key, ModbusTCPConfig config, out IModbus? modbus)
         {
@@ -114,7 +111,6 @@ namespace Communication.Modbus.Factory
             return true;
         }
 
-        // ── TryAdd RTU ──────────────────────────
 
         public bool TryAdd(string key, ModbusRTUConfig config, out IModbus? modbus)
         {
@@ -136,7 +132,6 @@ namespace Communication.Modbus.Factory
             return true;
         }
 
-        // ── TryRemove ───────────────────────────
 
         public bool TryRemove(string key)
         {
@@ -148,7 +143,6 @@ namespace Communication.Modbus.Factory
             return true;
         }
 
-        // ── IDisposable / IAsyncDisposable ──────
 
         public void Dispose()
         {
@@ -197,7 +191,6 @@ namespace Communication.Modbus.Factory
             logger.LogInformation("ModbusFactory disposed async ({Count} instances)", modbusList.Count);
         }
 
-        // ── Validation ──────────────────────────
 
         private static void ValidateAndFillDefaults(ModbusTCPConfig config, string key)
         {
