@@ -32,7 +32,7 @@ namespace Communication.Modbus.TCP
 
         public bool SetPort(int port = 502)
         {
-            if (port < 1024 || port > 65535)
+            if ((port < 1024 || port > 65535) && port != 502)
             {
                 return false;
             }

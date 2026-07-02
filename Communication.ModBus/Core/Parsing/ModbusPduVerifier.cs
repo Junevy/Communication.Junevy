@@ -49,7 +49,9 @@ namespace Communication.Modbus.Core.Parsing
             int expectedByteCount;
             byte byteCount = pdu[2];
 
-            if (functionCode == ModbusFunctionCode.ReadHoldingRegisters || functionCode == ModbusFunctionCode.ReadInputRegisters)
+            if (functionCode == ModbusFunctionCode.ReadHoldingRegisters
+                || functionCode == ModbusFunctionCode.ReadInputRegisters
+                || functionCode == ModbusFunctionCode.ReadWriteMultipleRegisters)
                 expectedByteCount = length * 2;
             else
                 expectedByteCount = (length + 7) / 8;

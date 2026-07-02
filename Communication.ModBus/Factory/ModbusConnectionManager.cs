@@ -50,7 +50,8 @@ namespace Communication.Modbus.Factory
         public bool Add(string key, IModbus modbus)
         {
             ThrowIfDisposed();
-            ArgumentNullException.ThrowIfNull(modbus);
+            if (modbus == null)
+                throw new ArgumentNullException(nameof(modbus));
 
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentException("Key must not be null or empty.", nameof(key));
@@ -69,7 +70,8 @@ namespace Communication.Modbus.Factory
         public IModbus GetOrAdd(string key, Func<string, IModbus> factory)
         {
             ThrowIfDisposed();
-            ArgumentNullException.ThrowIfNull(factory);
+            if (factory == null)
+                throw new ArgumentNullException(nameof(factory));
 
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentException("Key must not be null or empty.", nameof(key));

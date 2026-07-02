@@ -2,11 +2,12 @@ using Communication.Modbus.Core;
 using Communication.Modbus.Factory;
 using Communication.Modbus.RTU;
 using Communication.Modbus.TCP;
+using Communication.Modbus.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Communication.Modbus.DependencyInjection;
 
-namespace Communication.ModBus.Tests
+namespace Communication.Modbus.Tests
 {
     public class ModbusFactoryTests
     {

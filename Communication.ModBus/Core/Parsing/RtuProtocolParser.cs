@@ -2,7 +2,6 @@ using Communication.Modbus.Core.Interfaces;
 using Communication.Modbus.Core.Models;
 using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
-using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
@@ -45,7 +44,8 @@ namespace Communication.Modbus.Core.Parsing
 
             while (offset + RtuMinFrameLength <= span.Length)
             {
-                var remaining = span.Slice(offset);
+                var remainingMemory = response.Slice(offset);
+                var remaining = remainingMemory.Span;
 
                 byte id = remaining[0];
                 byte funcCode = remaining[1];
@@ -60,11 +60,23 @@ namespace Communication.Modbus.Core.Parsing
                 // Exception response
                 if (funcCode == (byte)((byte)request.FunctionCode | 0x80))
                 {
-                    var (exceptionResult, shouldRetry) = HandleRtuException(remaining);
+                    var (exceptionResult, shouldRetry) = HandleRtuException(remainingMemory);
                     if (!shouldRetry)
                         return exceptionResult;
                     offset++;
                     continue;
+                }
+
+                var commonResult = TryHandleRtuCommonFunction(remainingMemory, request);
+                if (commonResult.Handled)
+                {
+                    if (commonResult.Retry)
+                    {
+                        offset++;
+                        continue;
+                    }
+
+                    return commonResult.Result;
                 }
 
                 var category = verifier.CategorizeFunctionCode(request.FunctionCode);
@@ -80,7 +92,7 @@ namespace Communication.Modbus.Core.Parsing
                 // 0x16 Mask Write Register — special handling (response is an echo with 4 data bytes)
                 if (request.FunctionCode == ModbusFunctionCode.MaskWriteRegister)
                 {
-                    var maskResult = HandleRtuMaskWrite(remaining, request.Start, data);
+                    var maskResult = HandleRtuMaskWrite(remainingMemory, request.Start, data);
                     if (maskResult.Retry)
                     {
                         offset++;
@@ -92,13 +104,13 @@ namespace Communication.Modbus.Core.Parsing
                 var (payloadResult, retry) = category switch
                 {
                     ModbusPduVerifier.FunctionCodeCategory.Read =>
-                        HandleRtuRead(remaining, request.FunctionCode, request.Length),
+                        HandleRtuRead(remainingMemory, request.FunctionCode, request.Length),
 
                     ModbusPduVerifier.FunctionCodeCategory.WriteSingle =>
-                        HandleRtuWriteSingle(remaining, request.Start, data),
+                        HandleRtuWriteSingle(remainingMemory, request.Start, data),
 
                     ModbusPduVerifier.FunctionCodeCategory.WriteMulti =>
-                        HandleRtuWriteMulti(remaining, request.Start, request.Length),
+                        HandleRtuWriteMulti(remainingMemory, request.Start, request.Length),
 
                     _ => DefaultUnmatched(remaining)
                 };
@@ -116,132 +128,181 @@ namespace Communication.Modbus.Core.Parsing
             return ModbusResult<ReadOnlyMemory<byte>>.Fail(" [RtuParser] Failed to match response.", response);
         }
 
-        private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuException(ReadOnlySpan<byte> response)
+        private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuException(ReadOnlyMemory<byte> response)
         {
             const int exceptionLength = 5;
+            var span = response.Span;
 
-            if (exceptionLength > response.Length)
+            if (exceptionLength > span.Length)
             {
-                logger.LogWarning(" [HandleRtuException] Exception response too short: {Actual} < {Expected}.", response.Length, exceptionLength);
+                logger.LogWarning(" [HandleRtuException] Exception response too short: {Actual} < {Expected}.", span.Length, exceptionLength);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    $"Exception response too short. Expected {exceptionLength}, actual {response.Length}.", response.ToArray()), false);
+                    $"Exception response too short. Expected {exceptionLength}, actual {span.Length}.", response), false);
             }
 
-            var candidate = response[..exceptionLength];
+            var candidate = span.Slice(0, exceptionLength);
             if (Crc16Helper.VerifyCrc(candidate))
             {
                 logger.Rx("SerialPort", candidate, stopwatch, ref lastTimestamp);
-                return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate.ToArray()), false);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.Slice(0, exceptionLength)), false);
             }
 
             logger.LogWarning(" [HandleRtuException] CRC verification failed. Skipping byte.");
-            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuException] CRC verification failed.", candidate.ToArray()), true);
+            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuException] CRC verification failed.", response.Slice(0, exceptionLength)), true);
         }
 
         private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuRead(
-            ReadOnlySpan<byte> response, ModbusFunctionCode functionCode, ushort length)
+            ReadOnlyMemory<byte> response, ModbusFunctionCode functionCode, ushort length)
         {
-            int byteCount = response[2];
+            var span = response.Span;
+            int byteCount = span[2];
             int expectedLength = 3 + byteCount + 2;
 
-            if (response.Length < expectedLength)
+            if (span.Length < expectedLength)
             {
-                logger.LogWarning(" [HandleRtuRead] Response too short: {Actual} < {Expected}.", response.Length, expectedLength);
+                logger.LogWarning(" [HandleRtuRead] Response too short: {Actual} < {Expected}.", span.Length, expectedLength);
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    $"Response too short. Expected {expectedLength}, actual {response.Length}.", response.ToArray()), false);
+                    $"Response too short. Expected {expectedLength}, actual {span.Length}.", response), false);
             }
 
-            var candidate = response[..expectedLength];
+            var candidate = span.Slice(0, expectedLength);
 
             if (!verifier.VerifyReadPdu(candidate, functionCode, length))
             {
                 logger.LogWarning(" [HandleRtuRead] PDU verification failed.");
-                return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuRead] PDU verification failed.", response.ToArray()), true);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuRead] PDU verification failed.", response), true);
             }
 
             if (Crc16Helper.VerifyCrc(candidate))
             {
                 logger.Rx("SerialPort", candidate, stopwatch, ref lastTimestamp);
-                return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate.ToArray()), false);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.Slice(0, expectedLength)), false);
             }
 
             logger.LogWarning(" [HandleRtuRead] CRC verification failed. Skipping byte.");
-            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuRead] CRC verification failed.", candidate.ToArray()), true);
+            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuRead] CRC verification failed.", response.Slice(0, expectedLength)), true);
         }
 
         private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuWriteSingle(
-            ReadOnlySpan<byte> response, ushort startAddr, byte[] data)
+            ReadOnlyMemory<byte> response, ushort startAddr, byte[] data)
         {
-            if (data == null || data.Length == 0 || response.Length < 8)
+            var span = response.Span;
+            if (data == null || data.Length == 0 || span.Length < 8)
             {
                 logger.LogWarning(" [HandleRtuWriteSingle] Invalid data or response length.");
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    " [HandleRtuWriteSingle] Invalid data or response length.", response.ToArray()), false);
+                    " [HandleRtuWriteSingle] Invalid data or response length.", response), false);
             }
 
-            if (!verifier.VerifySingleWritePdu(response, startAddr, data))
+            var candidate = span.Slice(0, 8);
+            if (!verifier.VerifySingleWritePdu(candidate, startAddr, data))
             {
                 logger.LogWarning(" [HandleRtuWriteSingle] PDU verification failed.");
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    " [HandleRtuWriteSingle] PDU verification failed.", response.ToArray()), true);
+                    " [HandleRtuWriteSingle] PDU verification failed.", response), true);
             }
-
-            var candidate = response[..8];
 
             if (Crc16Helper.VerifyCrc(candidate))
             {
                 logger.Rx("SerialPort", candidate, stopwatch, ref lastTimestamp);
-                return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate.ToArray()), false);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.Slice(0, 8)), false);
             }
 
             logger.LogWarning(" [HandleRtuWriteSingle] CRC verification failed. Skipping byte.");
-            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuWriteSingle] CRC verification failed.", candidate.ToArray()), true);
+            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuWriteSingle] CRC verification failed.", response.Slice(0, 8)), true);
         }
 
         private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuMaskWrite(
-            ReadOnlySpan<byte> response, ushort startAddr, byte[] data)
+            ReadOnlyMemory<byte> response, ushort startAddr, byte[] data)
         {
+            var span = response.Span;
             // Data = [AndHi, AndLo, OrHi, OrLo]
-            if (data == null || data.Length != 4 || response.Length < 10)
+            if (data == null || data.Length != 4 || span.Length < 10)
             {
                 logger.LogWarning(" [HandleRtuMaskWrite] Invalid data or response length.");
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    " [HandleRtuMaskWrite] Invalid data or response length.", response.ToArray()), false);
+                    " [HandleRtuMaskWrite] Invalid data or response length.", response), false);
             }
 
             var andMask = BinaryExtensions.ToUshort(data[1], data[0]);
             var orMask = BinaryExtensions.ToUshort(data[3], data[2]);
 
-            if (!verifier.VerifyMaskWritePdu(response, startAddr, andMask, orMask))
+            var candidate = span.Slice(0, 10); // SlaveId + FuncCode + Start(2) + And(2) + Or(2) + CRC(2)
+
+            if (!verifier.VerifyMaskWritePdu(candidate, startAddr, andMask, orMask))
             {
                 logger.LogWarning(" [HandleRtuMaskWrite] PDU verification failed.");
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    " [HandleRtuMaskWrite] PDU verification failed.", response.ToArray()), true);
+                    " [HandleRtuMaskWrite] PDU verification failed.", response), true);
             }
-
-            var candidate = response[..10]; // SlaveId + FuncCode + Start(2) + And(2) + Or(2) + CRC(2)
 
             if (Crc16Helper.VerifyCrc(candidate))
             {
                 logger.Rx("SerialPort", candidate, stopwatch, ref lastTimestamp);
-                return (ModbusResult<ReadOnlyMemory<byte>>.Success(candidate.ToArray()), false);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.Slice(0, 10)), false);
             }
 
             logger.LogWarning(" [HandleRtuMaskWrite] CRC verification failed. Skipping byte.");
-            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuMaskWrite] CRC verification failed.", candidate.ToArray()), true);
+            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuMaskWrite] CRC verification failed.", response.Slice(0, 10)), true);
         }
 
         private (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) HandleRtuWriteMulti(
-            ReadOnlySpan<byte> response, ushort startAddr, ushort length)
+            ReadOnlyMemory<byte> response, ushort startAddr, ushort length)
         {
-            if (!verifier.VerifyMultiWritePdu(response[..8], startAddr, length))
+            var span = response.Span;
+            if (span.Length < 8)
+            {
+                logger.LogWarning(" [HandleRtuWriteMulti] Response too short: {Actual} < 8.", span.Length);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
+                    " [HandleRtuWriteMulti] Response too short.", response), false);
+            }
+
+            var candidate = span.Slice(0, 8);
+            if (!verifier.VerifyMultiWritePdu(candidate, startAddr, length))
             {
                 logger.LogWarning(" [HandleRtuWriteMulti] PDU verification failed.");
                 return (ModbusResult<ReadOnlyMemory<byte>>.Fail(
-                    " [HandleRtuWriteMulti] PDU verification failed.", response.ToArray()), true);
+                    " [HandleRtuWriteMulti] PDU verification failed.", response), true);
             }
 
-            return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.ToArray()), false);
+            if (Crc16Helper.VerifyCrc(candidate))
+            {
+                logger.Rx("SerialPort", candidate, stopwatch, ref lastTimestamp);
+                return (ModbusResult<ReadOnlyMemory<byte>>.Success(response.Slice(0, 8)), false);
+            }
+
+            logger.LogWarning(" [HandleRtuWriteMulti] CRC verification failed. Skipping byte.");
+            return (ModbusResult<ReadOnlyMemory<byte>>.Fail(" [HandleRtuWriteMulti] CRC verification failed.", response.Slice(0, 8)), true);
+        }
+
+        private (bool Handled, ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) TryHandleRtuCommonFunction(
+            ReadOnlyMemory<byte> response,
+            ModbusRequest request)
+        {
+            int expectedLength = request.FunctionCode switch
+            {
+                ModbusFunctionCode.ReadExceptionStatus => 5,
+                ModbusFunctionCode.Diagnostics => 4 + (request.Data?.Length ?? 0),
+                ModbusFunctionCode.GetCommEventCounter => 8,
+                ModbusFunctionCode.GetCommEventLog => response.Length >= 3 ? 3 + response.Span[2] + 2 : 0,
+                ModbusFunctionCode.ReportServerId => response.Length >= 3 ? 3 + response.Span[2] + 2 : 0,
+                _ => 0
+            };
+
+            if (expectedLength == 0)
+                return (false, ModbusResult<ReadOnlyMemory<byte>>.Fail(string.Empty), false);
+
+            if (response.Length < expectedLength)
+            {
+                return (true, ModbusResult<ReadOnlyMemory<byte>>.Fail(
+                    $" [RtuParser] Response too short. Expected {expectedLength}, actual {response.Length}.", response), false);
+            }
+
+            var candidate = response.Slice(0, expectedLength);
+            if (Crc16Helper.VerifyCrc(candidate.Span))
+                return (true, ModbusResult<ReadOnlyMemory<byte>>.Success(candidate), false);
+
+            return (true, ModbusResult<ReadOnlyMemory<byte>>.Fail(" [RtuParser] CRC verification failed.", candidate), true);
         }
 
         private static (ModbusResult<ReadOnlyMemory<byte>> Result, bool Retry) DefaultUnmatched(ReadOnlySpan<byte> response)

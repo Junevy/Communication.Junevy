@@ -1,4 +1,5 @@
 using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Framing;
 using Communication.Modbus.Core.Models;
 using Communication.Modbus.Core.Parsing;
 using Communication.Modbus.RTU;
@@ -20,6 +21,7 @@ namespace Communication.Modbus.Factory
         private readonly ILoggerFactory loggerFactory;
         private readonly TcpProtocolParser tcpParser;
         private readonly RtuProtocolParser rtuParser;
+        private readonly IModbusFrameBuilder frameBuilder;
         private bool disposed;
 
         public int Count => manager.Count;
@@ -45,6 +47,23 @@ namespace Communication.Modbus.Factory
                 loggerFactory,
                 tcpParser,
                 rtuParser,
+                null,
+                new ModbusConnectionManager(NullLogger<ModbusConnectionManager>.Instance))
+        {
+        }
+
+        public ModbusFactory(
+            ILogger<ModbusFactory> logger,
+            ILoggerFactory loggerFactory,
+            TcpProtocolParser tcpParser,
+            RtuProtocolParser rtuParser,
+            IModbusFrameBuilder frameBuilder)
+            : this(
+                logger,
+                loggerFactory,
+                tcpParser,
+                rtuParser,
+                frameBuilder,
                 new ModbusConnectionManager(NullLogger<ModbusConnectionManager>.Instance))
         {
         }
@@ -54,12 +73,14 @@ namespace Communication.Modbus.Factory
             ILoggerFactory loggerFactory,
             TcpProtocolParser? tcpParser,
             RtuProtocolParser? rtuParser,
+            IModbusFrameBuilder? frameBuilder,
             IModbusConnectionManager manager)
         {
             this.logger = logger ?? NullLogger<ModbusFactory>.Instance;
             this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
             this.tcpParser = tcpParser ?? new TcpProtocolParser();
             this.rtuParser = rtuParser ?? new RtuProtocolParser();
+            this.frameBuilder = frameBuilder ?? new ModbusFrameBuilder();
             this.manager = manager ?? new ModbusConnectionManager(NullLogger<ModbusConnectionManager>.Instance);
         }
 
@@ -88,7 +109,7 @@ namespace Communication.Modbus.Factory
 
             return manager.GetOrAdd(key, _ =>
             {
-                var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser);
+                var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser, frameBuilder);
                 logger.LogDebug(" [GetOrAdd] Created ModbusTCP: key={Key}.", key);
                 return tcp;
             });
@@ -102,7 +123,7 @@ namespace Communication.Modbus.Factory
 
             return manager.GetOrAdd(key, _ =>
             {
-                var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser);
+                var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser, frameBuilder);
                 logger.LogDebug(" [GetOrAdd] Created ModbusRTU: key={Key}.", key);
                 return rtu;
             });
@@ -115,7 +136,7 @@ namespace Communication.Modbus.Factory
             ValidateAndFillDefaults(config, key);
             logger.LogInformation(" [TryAdd] TCP: key={Key}, address={Address}:{Port}.", key, config.Address, config.Port);
 
-            var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser);
+            var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser, frameBuilder);
             if (!manager.Add(key, tcp))
             {
                 tcp.Dispose();
@@ -135,7 +156,7 @@ namespace Communication.Modbus.Factory
             ValidateAndFillDefaults(config, key);
             logger.LogInformation(" [TryAdd] RTU: key={Key}, port={PortName}.", key, config.PortName);
 
-            var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser);
+            var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser, frameBuilder);
             if (!manager.Add(key, rtu))
             {
                 rtu.Dispose();
@@ -191,7 +212,8 @@ namespace Communication.Modbus.Factory
 
         private static void ValidateAndFillDefaults(ModbusTCPConfig config, string key)
         {
-            ArgumentNullException.ThrowIfNull(config);
+            if (config == null)
+                throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentException("Key must not be null or empty.", nameof(key));
             if (string.IsNullOrEmpty(config.Address))
@@ -208,7 +230,8 @@ namespace Communication.Modbus.Factory
 
         private static void ValidateAndFillDefaults(ModbusRTUConfig config, string key)
         {
-            ArgumentNullException.ThrowIfNull(config);
+            if (config == null)
+                throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentException("Key must not be null or empty.", nameof(key));
             if (string.IsNullOrEmpty(config.PortName))

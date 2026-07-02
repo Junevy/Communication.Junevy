@@ -1,4 +1,5 @@
 using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Framing;
 using Communication.Modbus.Core.Models;
 using Communication.Modbus.Extensions;
 
@@ -6,21 +7,57 @@ namespace Communication.Modbus.Utils
 {
     public static class ModbusHelper
     {
+        private static readonly IModbusFrameBuilder FrameBuilder = new ModbusFrameBuilder();
+
         /// <summary>
         /// Validates a Modbus request frame.
         /// </summary>
         public static bool CheckRequest(ModbusRequest request)
         {
-            if (request.Start > 0xFFFF
-                || request.Length > 0xFFFF
-                || request.SlaveId > 255
-                || request.FunctionCode < ModbusFunctionCode.ReadCoils
-                || request.FunctionCode > ModbusFunctionCode.WriteMultipleHoldingRegisters)
+            if (request is null || !Enum.IsDefined(typeof(ModbusFunctionCode), request.FunctionCode))
                 return false;
 
-            if (request.FunctionCode < ModbusFunctionCode.WriteCoil ||
-                request.FunctionCode > ModbusFunctionCode.WriteMultipleHoldingRegisters) return true;
-            return request.Data != null && request.Data.Length > 0;
+            return request.FunctionCode switch
+            {
+                ModbusFunctionCode.ReadCoils
+                    or ModbusFunctionCode.ReadDiscreteInputs =>
+                    request.Length is >= 1 and <= 2000,
+
+                ModbusFunctionCode.ReadHoldingRegisters
+                    or ModbusFunctionCode.ReadInputRegisters =>
+                    request.Length is >= 1 and <= 125,
+
+                ModbusFunctionCode.WriteCoil
+                    or ModbusFunctionCode.WriteHoldingRegister =>
+                    request.Data is { Length: 2 },
+
+                ModbusFunctionCode.ReadExceptionStatus
+                    or ModbusFunctionCode.GetCommEventCounter
+                    or ModbusFunctionCode.GetCommEventLog
+                    or ModbusFunctionCode.ReportServerId =>
+                    true,
+
+                ModbusFunctionCode.Diagnostics =>
+                    request.Data is not null && request.Data.Length >= 4 && request.Data.Length <= 252,
+
+                ModbusFunctionCode.WriteMultipleCoils =>
+                    request.Length is >= 1 and <= 1968
+                    && request.Data is not null
+                    && request.Data.Length == (request.Length + 7) / 8,
+
+                ModbusFunctionCode.WriteMultipleHoldingRegisters =>
+                    request.Length is >= 1 and <= 123
+                    && request.Data is not null
+                    && request.Data.Length == request.Length * 2,
+
+                ModbusFunctionCode.MaskWriteRegister =>
+                    request.Data is { Length: 4 },
+
+                ModbusFunctionCode.ReadWriteMultipleRegisters =>
+                    IsValidReadWriteMultipleRegistersRequest(request.Data),
+
+                _ => false
+            };
         }
 
         /// <summary>
@@ -28,112 +65,7 @@ namespace Communication.Modbus.Utils
         /// </summary>
         /// <exception cref="ModbusException">Thrown when the request is invalid.</exception>
         public static byte[] BuildRequestFrame(ModbusRequest request)
-        {
-            if (!CheckRequest(request))
-                throw new ModbusException(ModbusErrorCode.InvalidValue, "Invalid request.");
-
-            return request.ProtocolType switch
-            {
-                ModbusProtocolType.RTU => BuildRtuRequestFrame(request),
-                ModbusProtocolType.TCP => BuildTcpRequestFrame(request),
-                _ => throw new ModbusException(ModbusErrorCode.InvalidValue, "The protocol is not supported.")
-            };
-        }
-
-        private static byte[] BuildRtuRequestFrame(ModbusRequest request)
-        {
-            List<byte> frame;
-
-            if (request.FunctionCode >= ModbusFunctionCode.WriteCoil)
-            {
-                if (request.Data == null || request.Data.Length <= 0)
-                    throw new ModbusException(ModbusErrorCode.InvalidData, "The data is empty.");
-
-                // 0x16 Mask Write Register: [SlaveId, 0x16, Start(2), AndMask(2), OrMask(2)]
-                if (request.FunctionCode == ModbusFunctionCode.MaskWriteRegister)
-                    frame =
-                    [
-                        request.SlaveId,
-                        (byte)request.FunctionCode,
-                        .. request.Start.ToBigEndian(),
-                        .. request.Data,  // Data = [AndHi, AndLo, OrHi, OrLo]
-                    ];
-
-                // Build single-write frame
-                else if (request.FunctionCode == ModbusFunctionCode.WriteCoil || request.FunctionCode == ModbusFunctionCode.WriteHoldingRegister)
-                    frame =
-                    [
-                        request.SlaveId,
-                        (byte)request.FunctionCode,
-                        .. request.Start.ToBigEndian(),
-                        .. request.Data,
-                    ];
-
-                // Build multi-write frame
-                else
-                    frame =
-                    [
-                        request.SlaveId,
-                        (byte)request.FunctionCode,
-                        .. request.Start.ToBigEndian(),
-                        .. request.Length.ToBigEndian(),
-                        (byte)(request.FunctionCode == ModbusFunctionCode.WriteMultipleCoils
-                                    ? (request.Length + 7) / 8 : (request.Length * 2)),
-                        .. request.Data,
-                    ];
-            }
-
-            // 0x17 Read/Write Multiple Registers: [SlaveId, 0x17, ReadStart(2), ReadQty(2), WriteStart(2), WriteQty(2), WriteByteCount, WriteData...]
-            else if (request.FunctionCode == ModbusFunctionCode.ReadWriteMultipleRegisters)
-            {
-                if (request.Data == null || request.Data.Length <= 0)
-                    throw new ModbusException(ModbusErrorCode.InvalidData, "The data is empty.");
-
-                frame =
-                [
-                    request.SlaveId,
-                    (byte)request.FunctionCode,
-                    .. request.Data,  // Pre-encoded: [ReadStart, ReadQty, WriteStart, WriteQty, ByteCount, WriteRegData...]
-                ];
-            }
-
-            // Build read frame
-            else
-            {
-                frame =
-                [
-                    request.SlaveId,
-                    (byte)request.FunctionCode,
-                    .. request.Start.ToBigEndian(),
-                    .. request.Length.ToBigEndian(),
-                ];
-            }
-
-            if (frame.Count == 0)
-                throw new ModbusException(ModbusErrorCode.InvalidValue, "Check the function code or data.");
-
-            Crc16Helper.AddCrc16(frame);
-            return [.. frame];
-        }
-
-        private static byte[] BuildTcpRequestFrame(ModbusRequest request)
-        {
-            var rtuFrame = BuildRtuRequestFrame(request);
-            // PDU = RTU frame minus 2-byte CRC (the last 2 bytes are not part of the TCP payload)
-            var pdu = rtuFrame.AsSpan(0, rtuFrame.Length - 2);
-            var transactionId = (ushort)(request.TransactionId + 0x01);
-
-            List<byte> frame =
-            [
-                .. transactionId.ToBigEndian(),
-                0x00,
-                0x00,
-                .. ((ushort)pdu.Length).ToBigEndian(),
-                .. pdu,
-            ];
-
-            return [.. frame];
-        }
+            => FrameBuilder.BuildRequestFrame(request);
 
         /// <summary>
         /// Parses coil values from a Modbus response frame.
@@ -193,5 +125,22 @@ namespace Communication.Modbus.Utils
         public static bool VerifyAddress(string address) => !string.IsNullOrEmpty(address);
 
         public static bool VerifyPort(int port) => (port >= 1024 && port <= 65535) || port == 502;
+
+        private static bool IsValidReadWriteMultipleRegistersRequest(byte[]? data)
+        {
+            // Data layout:
+            // ReadStart(2), ReadQty(2), WriteStart(2), WriteQty(2), WriteByteCount(1), WriteData...
+            if (data is null || data.Length < 9)
+                return false;
+
+            ushort readQuantity = (ushort)((data[2] << 8) | data[3]);
+            ushort writeQuantity = (ushort)((data[6] << 8) | data[7]);
+            byte writeByteCount = data[8];
+
+            return readQuantity is >= 1 and <= 125
+                && writeQuantity is >= 1 and <= 121
+                && writeByteCount == writeQuantity * 2
+                && data.Length == 9 + writeByteCount;
+        }
     }
 }

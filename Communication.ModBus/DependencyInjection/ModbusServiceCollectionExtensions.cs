@@ -1,4 +1,5 @@
 using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Framing;
 using Communication.Modbus.Core.Models;
 using Communication.Modbus.Core.Parsing;
 using Communication.Modbus.Factory;
@@ -19,13 +20,15 @@ namespace Communication.Modbus.DependencyInjection
         /// </summary>
         public static IServiceCollection AddModbusFactory(this IServiceCollection services)
         {
-            ArgumentNullException.ThrowIfNull(services);
+            if (services == null)
+                throw new ArgumentNullException(nameof(services));
 
             // Ensure a logger factory is available
             services.TryAddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
 
             // Register shared PDU verifier
             services.TryAddSingleton<ModbusPduVerifier>();
+            services.TryAddSingleton<IModbusFrameBuilder, ModbusFrameBuilder>();
 
             // Register protocol-specific parsers
             services.TryAddSingleton<TcpProtocolParser>();

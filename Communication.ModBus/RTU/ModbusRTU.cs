@@ -1,8 +1,9 @@
 using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Framing;
 using Communication.Modbus.Core.Models;
 using Communication.Modbus.Core.Parsing;
+using Communication.Modbus.Extensions;
 using Communication.Modbus.Utils;
-using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
@@ -15,6 +16,7 @@ namespace Communication.Modbus.RTU
         private bool disposed;
         private readonly ILogger<ModbusRTU> logger;
         private readonly IResponseParser responseParser;
+        private readonly IModbusFrameBuilder frameBuilder;
         private readonly Stopwatch stopwatch = Stopwatch.StartNew();
         private long lastTimestamp;
 
@@ -39,11 +41,21 @@ namespace Communication.Modbus.RTU
         }
 
         public ModbusRTU(ModbusRTUConfig config, ILogger<ModbusRTU> logger, IResponseParser responseParser)
+            : this(config, logger, responseParser, new ModbusFrameBuilder())
+        {
+        }
+
+        public ModbusRTU(
+            ModbusRTUConfig config,
+            ILogger<ModbusRTU> logger,
+            IResponseParser responseParser,
+            IModbusFrameBuilder frameBuilder)
         {
             this.Config = config
                 ?? throw new ModbusException(ModbusErrorCode.InvalidValue, nameof(config) + " is null!");
             this.logger = logger ?? NullLogger<ModbusRTU>.Instance;
             this.responseParser = responseParser ?? new RtuProtocolParser();
+            this.frameBuilder = frameBuilder ?? new ModbusFrameBuilder();
         }
 
         /// <summary>
@@ -164,14 +176,24 @@ namespace Communication.Modbus.RTU
 
             try
             {
-                byte[] requestFrame = ModbusHelper.BuildRequestFrame(request);
+                request.ProtocolType = ProtocolType;
+                var requestFrame = System.Buffers.ArrayPool<byte>.Shared.Rent(ModbusFrameBuilder.MaxRtuAduLength);
+                try
+                {
+                    if (!frameBuilder.TryWriteRequestFrame(request, requestFrame, out int bytesWritten))
+                        return false;
 
-                serialPort.DiscardInBuffer();
-                serialPort.DiscardOutBuffer();
+                    serialPort.DiscardInBuffer();
+                    serialPort.DiscardOutBuffer();
 
-                serialPort.Write(requestFrame, 0, requestFrame.Length);
-                logger.Tx("ModbusRTU", requestFrame, stopwatch, ref lastTimestamp);
-                return true;
+                    serialPort.Write(requestFrame, 0, bytesWritten);
+                    logger.Tx("ModbusRTU", new ArraySegment<byte>(requestFrame, 0, bytesWritten).ToArray(), stopwatch, ref lastTimestamp);
+                    return true;
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(requestFrame);
+                }
             }
             catch (TimeoutException)
             {
@@ -253,9 +275,11 @@ namespace Communication.Modbus.RTU
             if (!ModbusHelper.CheckRequest(request))
                 return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid request.", request.Data);
 
+            var lockTaken = false;
             try
             {
                 await requestLock.WaitAsync(token);
+                lockTaken = true;
                 var sendResult = await SendAsync(request, token);
 
                 if (!sendResult) return ModbusResult<byte[]>.Fail(" [RequestAsync] Send frame failed.");
@@ -269,7 +293,8 @@ namespace Communication.Modbus.RTU
             }
             finally
             {
-                requestLock.Release();
+                if (lockTaken)
+                    requestLock.Release();
             }
         }
 
@@ -279,15 +304,27 @@ namespace Communication.Modbus.RTU
 
             try
             {
-                byte[] requestFrame = ModbusHelper.BuildRequestFrame(request);
+                request.ProtocolType = ProtocolType;
+                int frameLength = frameBuilder.GetRequestFrameLength(request);
+                byte[] requestFrame = System.Buffers.ArrayPool<byte>.Shared.Rent(frameLength);
                 token.ThrowIfCancellationRequested();
 
-                serialPort.DiscardInBuffer();
-                serialPort.DiscardOutBuffer();
+                try
+                {
+                    if (!frameBuilder.TryWriteRequestFrame(request, requestFrame, out int bytesWritten))
+                        return false;
 
-                await Task.Run(() => serialPort.Write(requestFrame, 0, requestFrame.Length), token);
-                logger.Tx("ModbusRTU", requestFrame, stopwatch, ref lastTimestamp);
-                return true;
+                    serialPort.DiscardInBuffer();
+                    serialPort.DiscardOutBuffer();
+
+                    await serialPort.BaseStream.WriteAsync(requestFrame, 0, bytesWritten, token);
+                    logger.Tx("ModbusRTU", new ArraySegment<byte>(requestFrame, 0, bytesWritten).ToArray(), stopwatch, ref lastTimestamp);
+                    return true;
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(requestFrame);
+                }
             }
             catch (TimeoutException)
             {
@@ -389,7 +426,8 @@ namespace Communication.Modbus.RTU
 
         private void ThrowIfDisposed()
         {
-            ObjectDisposedException.ThrowIf(disposed, this);
+            if (disposed)
+                throw new ObjectDisposedException(nameof(ModbusRTU));
         }
     }
 }

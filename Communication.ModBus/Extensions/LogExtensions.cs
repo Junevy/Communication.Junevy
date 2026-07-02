@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Text;
 
-namespace Communication.ModBus.Extensions
+namespace Communication.Modbus.Extensions
 {
     /// <summary>
     /// Provides extension methods for logging Modbus TX/RX data.
@@ -16,12 +17,24 @@ namespace Communication.ModBus.Extensions
             if (bytes == null || bytes.Length == 0)
                 return string.Empty;
 
-            var lines = bytes
-                .Select((b, i) => new { b, i })
-                .GroupBy(x => x.i / 16)
-                .Select(g => string.Join("-", g.Select(x => x.b.ToString("X2"))));
+            return ((ReadOnlySpan<byte>)bytes).ToHex();
+        }
 
-            return string.Join(Environment.NewLine, lines);
+        public static string ToHex(this ReadOnlySpan<byte> bytes)
+        {
+            if (bytes.Length == 0)
+                return string.Empty;
+
+            var builder = new StringBuilder(bytes.Length * 3);
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                if (i > 0)
+                    builder.Append(i % 16 == 0 ? Environment.NewLine : '-');
+
+                builder.Append(bytes[i].ToString("X2"));
+            }
+
+            return builder.ToString();
         }
 
         /// <summary>
@@ -33,6 +46,12 @@ namespace Communication.ModBus.Extensions
         /// <param name="stopwatch">A running stopwatch for time-delta calculation.</param>
         /// <param name="lastTimestamp">Reference to the last recorded timestamp (will be updated).</param>
         public static void Tx(this ILogger logger, string name, byte[] data, Stopwatch stopwatch, ref long lastTimestamp)
+            => Tx(logger, name, (ReadOnlySpan<byte>)data, stopwatch, ref lastTimestamp);
+
+        /// <summary>
+        /// Logs a transmitted Modbus frame with a timestamp.
+        /// </summary>
+        public static void Tx(this ILogger logger, string name, ReadOnlySpan<byte> data, Stopwatch stopwatch, ref long lastTimestamp)
         {
             long now = stopwatch.ElapsedMilliseconds;
 
@@ -61,7 +80,7 @@ namespace Communication.ModBus.Extensions
             logger.LogDebug(
                 "[RX] [{Name}] <-- {Data} (+{Delta} ms)",
                 name,
-                data.ToArray().ToHex(),
+                data.ToHex(),
                 delta
             );
 
