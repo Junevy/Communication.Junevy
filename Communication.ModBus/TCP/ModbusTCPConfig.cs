@@ -11,6 +11,11 @@ namespace Communication.Modbus.TCP
         public bool Reconnect { get; set; } = false;
 
         /// <summary>
+        /// Delay between retry/reconnect attempts in milliseconds.
+        /// </summary>
+        public int RetryInterval { get; set; } = 100;
+
+        /// <summary>
         /// Connection timeout in milliseconds.
         /// </summary>
         public int ConnectTimeout { get; set; } = 2000;

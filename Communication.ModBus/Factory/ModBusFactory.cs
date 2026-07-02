@@ -226,6 +226,10 @@ namespace Communication.Modbus.Factory
                 config.WriteTimeOut = 2000;
             if (config.ConnectTimeout <= 0)
                 config.ConnectTimeout = 2000;
+            if (config.RetryCount < 0)
+                config.RetryCount = 0;
+            if (config.RetryInterval < 0)
+                config.RetryInterval = 100;
         }
 
         private static void ValidateAndFillDefaults(ModbusRTUConfig config, string key)
@@ -245,6 +249,12 @@ namespace Communication.Modbus.Factory
                 config.ReadTimeOut = 2000;
             if (config.WriteTimeOut <= 0)
                 config.WriteTimeOut = 2000;
+            if (config.RetryCount < 0)
+                config.RetryCount = 0;
+            if (config.RetryInterval < 0)
+                config.RetryInterval = 100;
+            if (config.IntervalTime < 0)
+                config.IntervalTime = 30;
         }
 
         private void ThrowIfDisposed()

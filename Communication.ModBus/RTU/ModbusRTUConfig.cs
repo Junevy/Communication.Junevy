@@ -41,6 +41,11 @@ namespace Communication.Modbus.RTU
         public bool RtsEnable { get; set; } = false;
 
         /// <summary>
+        /// Reopen the serial port automatically before retrying failed requests.
+        /// </summary>
+        public bool Reconnect { get; set; } = false;
+
+        /// <summary>
         /// Write timeout in milliseconds.
         /// </summary>
         public int WriteTimeOut { get; set; } = 2000;
@@ -54,6 +59,11 @@ namespace Communication.Modbus.RTU
         /// Number of retry attempts.
         /// </summary>
         public int RetryCount { get; set; } = 3;
+
+        /// <summary>
+        /// Delay between retry/reconnect attempts in milliseconds.
+        /// </summary>
+        public int RetryInterval { get; set; } = 100;
 
         /// <summary>
         /// Interval in milliseconds to wait between partial frame reads.

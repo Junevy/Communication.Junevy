@@ -19,5 +19,15 @@ namespace Communication.Modbus.Core.Interfaces
         /// Number of retry attempts on communication failure.
         /// </summary>
         int RetryCount { get; set; }
+
+        /// <summary>
+        /// Whether to reopen the physical connection automatically before retrying.
+        /// </summary>
+        bool Reconnect { get; set; }
+
+        /// <summary>
+        /// Delay in milliseconds between retry/reconnect attempts.
+        /// </summary>
+        int RetryInterval { get; set; }
     }
 }

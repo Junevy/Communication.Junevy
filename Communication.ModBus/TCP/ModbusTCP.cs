@@ -24,7 +24,7 @@ namespace Communication.Modbus.TCP
         private bool disposed;
 
         public ModbusTCPConfig Config { get; private set; }
-        public bool IsConnected => !disposed && (socket?.Connected ?? false);
+        public bool IsConnected => !disposed && IsSocketConnected(socket);
         public ModbusProtocolType ProtocolType => ModbusProtocolType.TCP;
 
         public ModbusTCP(ModbusTCPConfig config)
@@ -86,7 +86,9 @@ namespace Communication.Modbus.TCP
             catch (Exception ex)
             {
                 logger.LogError(ex, " [Connect] Connection failed.");
-                throw;
+                socket?.Dispose();
+                socket = null;
+                return false;
             }
         }
 
@@ -108,19 +110,12 @@ namespace Communication.Modbus.TCP
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, " [Disconnect] Disconnect failed.");
-                throw;
+                logger.LogWarning(ex, " [Disconnect] Disconnect failed.");
             }
         }
 
         public ModbusResult<byte[]> Request(ModbusRequest request)
         {
-            if (!CheckConnection())
-            {
-                logger.LogWarning(" [Request] Not connected.");
-                return ModbusResult<byte[]>.Fail(" [Request] Not connected.");
-            }
-
             if (!ModbusHelper.CheckRequest(request))
             {
                 logger.LogWarning(" [Request] Invalid request: {@Request}.", request);
@@ -130,19 +125,13 @@ namespace Communication.Modbus.TCP
             requestLock.Wait();
             try
             {
-                logger.LogDebug(" [Request] Sending request: {@Request}.", request);
-                if (!Send(request))
-                {
-                    logger.LogWarning(" [Request] Send failed.");
-                    return ModbusResult<byte[]>.Fail(" [Request] Send failed.");
-                }
-
-                return Read(request);
+                return ExecuteRequestWithRetry(request);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsCommunicationException(ex))
             {
                 logger.LogError(ex, " [Request] Request failed.");
-                throw;
+                MarkConnectionFaulted();
+                return ModbusResult<byte[]>.Fail($" [Request] Request failed: {ex.Message}");
             }
             finally
             {
@@ -154,12 +143,6 @@ namespace Communication.Modbus.TCP
             ModbusRequest request,
             CancellationToken cancellationToken = default)
         {
-            if (!CheckConnection())
-            {
-                logger.LogWarning(" [RequestAsync] Not connected.");
-                return ModbusResult<byte[]>.Fail(" [RequestAsync] Not connected.");
-            }
-
             if (!ModbusHelper.CheckRequest(request))
             {
                 logger.LogWarning(" [RequestAsync] Invalid request: {@Request}.", request);
@@ -172,23 +155,18 @@ namespace Communication.Modbus.TCP
                 await requestLock.WaitAsync(cancellationToken);
                 lockTaken = true;
 
-                if (!await SendAsync(request, cancellationToken))
-                {
-                    logger.LogWarning(" [RequestAsync] Send failed.");
-                    return ModbusResult<byte[]>.Fail(" [RequestAsync] Send failed.");
-                }
-
-                return await ReadAsync(request, cancellationToken);
+                return await ExecuteRequestWithRetryAsync(request, cancellationToken);
             }
             catch (OperationCanceledException)
             {
                 logger.LogWarning(" [RequestAsync] Request cancelled.");
                 return ModbusResult<byte[]>.Fail(" [RequestAsync] Request cancelled.");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsCommunicationException(ex))
             {
                 logger.LogError(ex, " [RequestAsync] Request failed.");
-                throw;
+                MarkConnectionFaulted();
+                return ModbusResult<byte[]>.Fail($" [RequestAsync] Request failed: {ex.Message}");
             }
             finally
             {
@@ -249,6 +227,116 @@ namespace Communication.Modbus.TCP
                 if (frame != null)
                     ArrayPool<byte>.Shared.Return(frame);
             }
+        }
+
+        private ModbusResult<byte[]> ExecuteRequestWithRetry(ModbusRequest request)
+        {
+            ModbusResult<byte[]> lastResult = ModbusResult<byte[]>.Fail("Request was not executed.");
+            int attempts = GetAttemptCount();
+
+            for (int attempt = 1; attempt <= attempts; attempt++)
+            {
+                if (!EnsureConnected())
+                {
+                    lastResult = ModbusResult<byte[]>.Fail(" [Request] Not connected.");
+                    if (attempt < attempts)
+                    {
+                        WaitBeforeRetry();
+                        continue;
+                    }
+
+                    return lastResult;
+                }
+
+                logger.LogDebug(" [Request] Attempt {Attempt}/{Attempts}: {@Request}.", attempt, attempts, request);
+
+                try
+                {
+                    if (!Send(request))
+                    {
+                        lastResult = ModbusResult<byte[]>.Fail(" [Request] Send failed.");
+                        MarkConnectionFaulted();
+                    }
+                    else
+                    {
+                        lastResult = Read(request);
+                        if (lastResult.IsSuccess)
+                            return lastResult;
+
+                        logger.LogWarning(" [Request] Attempt {Attempt}/{Attempts} failed: {Error}.", attempt, attempts, lastResult.ErrorMessage);
+                        if (ShouldReconnectAfterFailure(lastResult))
+                            MarkConnectionFaulted();
+                    }
+                }
+                catch (Exception ex) when (IsCommunicationException(ex))
+                {
+                    logger.LogWarning(ex, " [Request] Attempt {Attempt}/{Attempts} failed.", attempt, attempts);
+                    lastResult = ModbusResult<byte[]>.Fail($" [Request] {ex.Message}");
+                    MarkConnectionFaulted();
+                }
+
+                if (attempt < attempts)
+                    WaitBeforeRetry();
+            }
+
+            return lastResult;
+        }
+
+        private async Task<ModbusResult<byte[]>> ExecuteRequestWithRetryAsync(
+            ModbusRequest request,
+            CancellationToken cancellationToken)
+        {
+            ModbusResult<byte[]> lastResult = ModbusResult<byte[]>.Fail("Request was not executed.");
+            int attempts = GetAttemptCount();
+
+            for (int attempt = 1; attempt <= attempts; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!await EnsureConnectedAsync(cancellationToken))
+                {
+                    lastResult = ModbusResult<byte[]>.Fail(" [RequestAsync] Not connected.");
+                    if (attempt < attempts)
+                    {
+                        await WaitBeforeRetryAsync(cancellationToken);
+                        continue;
+                    }
+
+                    return lastResult;
+                }
+
+                logger.LogDebug(" [RequestAsync] Attempt {Attempt}/{Attempts}: {@Request}.", attempt, attempts, request);
+
+                try
+                {
+                    if (!await SendAsync(request, cancellationToken))
+                    {
+                        lastResult = ModbusResult<byte[]>.Fail(" [RequestAsync] Send failed.");
+                        MarkConnectionFaulted();
+                    }
+                    else
+                    {
+                        lastResult = await ReadAsync(request, cancellationToken);
+                        if (lastResult.IsSuccess)
+                            return lastResult;
+
+                        logger.LogWarning(" [RequestAsync] Attempt {Attempt}/{Attempts} failed: {Error}.", attempt, attempts, lastResult.ErrorMessage);
+                        if (ShouldReconnectAfterFailure(lastResult))
+                            MarkConnectionFaulted();
+                    }
+                }
+                catch (Exception ex) when (IsCommunicationException(ex))
+                {
+                    logger.LogWarning(ex, " [RequestAsync] Attempt {Attempt}/{Attempts} failed.", attempt, attempts);
+                    lastResult = ModbusResult<byte[]>.Fail($" [RequestAsync] {ex.Message}");
+                    MarkConnectionFaulted();
+                }
+
+                if (attempt < attempts)
+                    await WaitBeforeRetryAsync(cancellationToken);
+            }
+
+            return lastResult;
         }
 
         private async ValueTask<bool> SendAsync(ModbusRequest request, CancellationToken cancellationToken = default)
@@ -339,10 +427,124 @@ namespace Communication.Modbus.TCP
             socket = CreateSocket();
             socket.ReceiveTimeout = Config.ReadTimeOut;
             socket.SendTimeout = Config.WriteTimeOut;
+            socket.NoDelay = true;
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
         }
 
         private static Socket CreateSocket()
             => new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+
+        private bool EnsureConnected()
+        {
+            if (IsConnected)
+                return true;
+
+            if (!Config.Reconnect)
+                return false;
+
+            logger.LogInformation(" [Reconnect] TCP connection is not available. Reconnecting to {Address}:{Port}.", Config.Address, Config.Port);
+            try
+            {
+                return Connect();
+            }
+            catch (Exception ex) when (IsCommunicationException(ex))
+            {
+                logger.LogWarning(ex, " [Reconnect] TCP reconnect failed.");
+                return false;
+            }
+        }
+
+        private async Task<bool> EnsureConnectedAsync(CancellationToken cancellationToken)
+        {
+            if (IsConnected)
+                return true;
+
+            if (!Config.Reconnect)
+                return false;
+
+            logger.LogInformation(" [ReconnectAsync] TCP connection is not available. Reconnecting to {Address}:{Port}.", Config.Address, Config.Port);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return await ConnectAsync();
+            }
+            catch (Exception ex) when (IsCommunicationException(ex))
+            {
+                logger.LogWarning(ex, " [ReconnectAsync] TCP reconnect failed.");
+                return false;
+            }
+        }
+
+        private void MarkConnectionFaulted()
+        {
+            try
+            {
+                socket?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, " [MarkConnectionFaulted] Error disposing socket.");
+            }
+            finally
+            {
+                socket = null;
+            }
+        }
+
+        private int GetAttemptCount()
+            => Math.Max(1, Config.RetryCount + 1);
+
+        private void WaitBeforeRetry()
+        {
+            if (Config.RetryInterval > 0)
+                Thread.Sleep(Config.RetryInterval);
+        }
+
+        private Task WaitBeforeRetryAsync(CancellationToken cancellationToken)
+        {
+            return Config.RetryInterval > 0
+                ? Task.Delay(Config.RetryInterval, cancellationToken)
+                : Task.CompletedTask;
+        }
+
+        private static bool IsSocketConnected(Socket? target)
+        {
+            if (target == null || !target.Connected)
+                return false;
+
+            try
+            {
+                return !(target.Poll(0, SelectMode.SelectRead) && target.Available == 0);
+            }
+            catch (SocketException)
+            {
+                return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+        }
+
+        private static bool IsCommunicationException(Exception ex)
+        {
+            return ex is SocketException
+                || ex is IOException
+                || ex is ObjectDisposedException
+                || ex is InvalidOperationException
+                || ex is EndOfStreamException;
+        }
+
+        private static bool ShouldReconnectAfterFailure(ModbusResult<byte[]> result)
+        {
+            if (result.IsSuccess || string.IsNullOrEmpty(result.ErrorMessage))
+                return false;
+
+            string message = result.ErrorMessage!;
+            return message.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("closed", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("not connected", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         private void ThrowIfDisposed()
         {

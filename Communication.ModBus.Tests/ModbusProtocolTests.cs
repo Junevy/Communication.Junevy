@@ -4,6 +4,8 @@ using Communication.Modbus.Core.Parsing;
 using Communication.Modbus.RTU;
 using Communication.Modbus.TCP;
 using Communication.Modbus.Utils;
+using System.Net;
+using System.Net.Sockets;
 
 namespace Communication.Modbus.Tests
 {
@@ -251,6 +253,64 @@ namespace Communication.Modbus.Tests
             };
 
             Assert.True(ModbusHelper.CheckRequest(request));
+        }
+
+        [Fact]
+        public async Task TcpRequest_AutoConnectsWhenReconnectEnabled()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+            var serverTask = Task.Run(async () =>
+            {
+                byte[] response =
+                [
+                    0x00, 0x01,
+                    0x00, 0x00,
+                    0x00, 0x05,
+                    0x01,
+                    0x03,
+                    0x02,
+                    0x12, 0x34
+                ];
+
+                using var reconnect = await listener.AcceptTcpClientAsync();
+                using var stream = reconnect.GetStream();
+
+                byte[] request = new byte[12];
+                int read = 0;
+                while (read < request.Length)
+                    read += await stream.ReadAsync(request, read, request.Length - read);
+
+                await stream.WriteAsync(response, 0, response.Length);
+            });
+
+            using var client = new ModbusTCP(new ModbusTCPConfig
+            {
+                Address = IPAddress.Loopback.ToString(),
+                ReadTimeOut = 1000,
+                WriteTimeOut = 1000,
+                ConnectTimeout = 1000,
+                Reconnect = true,
+                RetryCount = 3,
+                RetryInterval = 10
+            });
+            Assert.True(client.Config.SetPort(port));
+
+            var result = client.Request(new ModbusRequest
+            {
+                SlaveId = 1,
+                FunctionCode = ModbusFunctionCode.ReadHoldingRegisters,
+                Start = 0,
+                Length = 1
+            });
+
+            listener.Stop();
+            await serverTask;
+
+            Assert.True(result.IsSuccess, result.ErrorMessage);
+            Assert.Equal([0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x01, 0x03, 0x02, 0x12, 0x34], result.Data);
         }
     }
 }

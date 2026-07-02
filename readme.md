@@ -110,7 +110,10 @@ var factory = provider.GetRequiredService<IModbusFactory>();
 var plc = factory.GetOrAdd("plc-1", new ModbusTCPConfig
 {
     Address = "192.168.1.100",
-    Port = 502
+    Port = 502,
+    Reconnect = true,
+    RetryCount = 3,
+    RetryInterval = 200
 });
 
 plc.Connect();
@@ -146,9 +149,43 @@ var raw = plc.Request(new ModbusRequest
 });
 ```
 
+## Reconnect and Retry
+
+Both TCP and RTU transports support request-level retry and optional reconnect:
+
+```csharp
+var tcp = new ModbusTCP(new ModbusTCPConfig
+{
+    Address = "192.168.1.100",
+    Port = 502,
+    Reconnect = true,
+    RetryCount = 3,
+    RetryInterval = 200,
+    ConnectTimeout = 2000,
+    ReadTimeOut = 2000,
+    WriteTimeOut = 2000
+});
+
+var rtu = new ModbusRTU(new ModbusRTUConfig
+{
+    PortName = "COM3",
+    Reconnect = true,
+    RetryCount = 3,
+    RetryInterval = 200
+});
+```
+
+Behavior:
+
+- `RetryCount` is the number of retries after the first attempt.
+- When `Reconnect = true`, a failed or closed TCP socket is recreated before the next retry.
+- For RTU, a faulted or closed serial port is closed and reopened before the next retry.
+- Communication failures are returned as `ModbusResult.Fail(...)` where possible instead of escaping as unhandled exceptions.
+
 ## Notes
 
 - One request at a time is serialized per connection with `SemaphoreSlim`.
 - RTU frames use CRC16 verification.
 - TCP responses validate MBAP protocol id, transaction id, and unit id.
 - Register addresses are protocol-level zero-based addresses.
+- For industrial field use, keep polling intervals larger than the slave response time, set explicit timeouts, enable reconnect for long-running services, and log failed requests with enough device context to diagnose wiring/network faults.
