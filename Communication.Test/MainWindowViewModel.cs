@@ -1,4 +1,5 @@
-﻿using Communication.Modbus.Core;
+﻿using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Models;
 using Communication.Modbus.Extensions;
 using Communication.Modbus.Factory;
 using Communication.Modbus.RTU;

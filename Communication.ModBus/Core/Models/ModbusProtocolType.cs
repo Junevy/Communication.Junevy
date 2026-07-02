@@ -1,4 +1,4 @@
-namespace Communication.Modbus.Core
+namespace Communication.Modbus.Core.Models
 {
     /// <summary>
     /// Modbus协议类型

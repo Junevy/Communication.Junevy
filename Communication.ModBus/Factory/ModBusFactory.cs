@@ -1,196 +1,193 @@
-using Communication.Modbus.Core;
+using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Models;
+using Communication.Modbus.Core.Parsing;
 using Communication.Modbus.RTU;
 using Communication.Modbus.TCP;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Collections.Concurrent;
 
 namespace Communication.Modbus.Factory
 {
+    /// <summary>
+    /// Creates and manages named Modbus instances.
+    /// Delegates lifecycle management to <see cref="ModbusConnectionManager"/> and
+    /// protocol-specific response parsing to <see cref="TcpProtocolParser"/> / <see cref="RtuProtocolParser"/>.
+    /// </summary>
     public sealed class ModbusFactory : IModbusFactory
     {
-        private readonly ConcurrentDictionary<string, IModbus> modbusList = new();
+        private readonly IModbusConnectionManager manager;
         private readonly ILogger<ModbusFactory> logger;
         private readonly ILoggerFactory loggerFactory;
-
+        private readonly TcpProtocolParser tcpParser;
+        private readonly RtuProtocolParser rtuParser;
         private bool disposed;
 
-        public int Count => modbusList.Count;
-        public IEnumerable<string> Keys => modbusList.Keys;
+        public int Count => manager.Count;
+        public IEnumerable<string> Keys => manager.Keys;
 
-        public ModbusFactory() 
-               : this(NullLogger<ModbusFactory>.Instance, NullLoggerFactory.Instance)
+        public ModbusFactory()
+            : this(NullLogger<ModbusFactory>.Instance, NullLoggerFactory.Instance)
         {
         }
 
         public ModbusFactory(ILogger<ModbusFactory> logger, ILoggerFactory loggerFactory)
+            : this(logger, loggerFactory, null, null)
+        {
+        }
+
+        public ModbusFactory(
+            ILogger<ModbusFactory> logger,
+            ILoggerFactory loggerFactory,
+            TcpProtocolParser? tcpParser,
+            RtuProtocolParser? rtuParser)
+            : this(
+                logger,
+                loggerFactory,
+                tcpParser,
+                rtuParser,
+                new ModbusConnectionManager(NullLogger<ModbusConnectionManager>.Instance))
+        {
+        }
+
+        internal ModbusFactory(
+            ILogger<ModbusFactory> logger,
+            ILoggerFactory loggerFactory,
+            TcpProtocolParser? tcpParser,
+            RtuProtocolParser? rtuParser,
+            IModbusConnectionManager manager)
         {
             this.logger = logger ?? NullLogger<ModbusFactory>.Instance;
             this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-
-            ResponseParser.SetLogger(this.loggerFactory);
+            this.tcpParser = tcpParser ?? new TcpProtocolParser();
+            this.rtuParser = rtuParser ?? new RtuProtocolParser();
+            this.manager = manager ?? new ModbusConnectionManager(NullLogger<ModbusConnectionManager>.Instance);
         }
-
 
         public IModbus? Get(string key)
         {
             ThrowIfDisposed();
-            if (string.IsNullOrEmpty(key))
-                return null;
-            modbusList.TryGetValue(key, out var modbus);
-            return modbus;
+            return manager.Get(key);
         }
 
         public TResult GetRequired<TResult>(string key) where TResult : class, IModbus
         {
-            var modbus = Get(key);
-            if (modbus is TResult typed)
-                return typed;
-            throw new ModbusException(ModbusErrorCode.GatewayUnavailable,
-                $"Modbus instance '{key}' not found or type mismatch. Expected {typeof(TResult).Name}.");
+            return manager.GetRequired<TResult>(key);
         }
 
+        public bool TryGet(string key, out IModbus? modbus)
+        {
+            ThrowIfDisposed();
+            return manager.TryGet(key, out modbus);
+        }
 
         public IModbus GetOrAdd(string key, ModbusTCPConfig config)
         {
             ThrowIfDisposed();
             ValidateAndFillDefaults(config, key);
-            logger.LogInformation("GetOrAdd TCP: key={Key}, address={Address}:{Port}", key, config.Address, config.Port);
+            logger.LogInformation(" [GetOrAdd] TCP: key={Key}, address={Address}:{Port}.", key, config.Address, config.Port);
 
-            return modbusList.GetOrAdd(key, _ =>
+            return manager.GetOrAdd(key, _ =>
             {
-                var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>());
-                logger.LogDebug("Created ModbusTCP: key={Key}", key);
+                var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser);
+                logger.LogDebug(" [GetOrAdd] Created ModbusTCP: key={Key}.", key);
                 return tcp;
             });
         }
-
 
         public IModbus GetOrAdd(string key, ModbusRTUConfig config)
         {
             ThrowIfDisposed();
             ValidateAndFillDefaults(config, key);
-            logger.LogInformation("GetOrAdd RTU: key={Key}, port={PortName}", key, config.PortName);
+            logger.LogInformation(" [GetOrAdd] RTU: key={Key}, port={PortName}.", key, config.PortName);
 
-            return modbusList.GetOrAdd(key, _ =>
+            return manager.GetOrAdd(key, _ =>
             {
-                var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>());
-                logger.LogDebug("Created ModbusRTU: key={Key}", key);
+                var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser);
+                logger.LogDebug(" [GetOrAdd] Created ModbusRTU: key={Key}.", key);
                 return rtu;
             });
         }
-
-
-        public bool TryGet(string key, out IModbus? modbus)
-        {
-            ThrowIfDisposed();
-            modbus = null;
-            if (string.IsNullOrEmpty(key))
-                return false;
-            return modbusList.TryGetValue(key, out modbus);
-        }
-
 
         public bool TryAdd(string key, ModbusTCPConfig config, out IModbus? modbus)
         {
             ThrowIfDisposed();
             modbus = null;
             ValidateAndFillDefaults(config, key);
-            logger.LogInformation("TryAdd TCP: key={Key}, address={Address}:{Port}", key, config.Address, config.Port);
+            logger.LogInformation(" [TryAdd] TCP: key={Key}, address={Address}:{Port}.", key, config.Address, config.Port);
 
-            modbus = new ModbusTCP(config);
-            if (!modbusList.TryAdd(key, modbus))
+            var tcp = new ModbusTCP(config, loggerFactory.CreateLogger<ModbusTCP>(), tcpParser);
+            if (!manager.Add(key, tcp))
             {
-                modbus.Dispose();
-                modbus = null;
-                logger.LogWarning("TryAdd TCP failed: key {Key} already exists", key);
+                tcp.Dispose();
+                logger.LogWarning(" [TryAdd] TCP failed: key '{Key}' already exists.", key);
                 return false;
             }
 
-            logger.LogDebug("Added ModbusTCP: key={Key}", key);
+            modbus = tcp;
+            logger.LogDebug(" [TryAdd] Added ModbusTCP: key={Key}.", key);
             return true;
         }
-
 
         public bool TryAdd(string key, ModbusRTUConfig config, out IModbus? modbus)
         {
             ThrowIfDisposed();
             modbus = null;
             ValidateAndFillDefaults(config, key);
-            logger.LogInformation("TryAdd RTU: key={Key}, port={PortName}", key, config.PortName);
+            logger.LogInformation(" [TryAdd] RTU: key={Key}, port={PortName}.", key, config.PortName);
 
-            modbus = new ModbusRTU(config);
-            if (!modbusList.TryAdd(key, modbus))
+            var rtu = new ModbusRTU(config, loggerFactory.CreateLogger<ModbusRTU>(), rtuParser);
+            if (!manager.Add(key, rtu))
             {
-                modbus.Dispose();
-                modbus = null;
-                logger.LogWarning("TryAdd RTU failed: key {Key} already exists", key);
+                rtu.Dispose();
+                logger.LogWarning(" [TryAdd] RTU failed: key '{Key}' already exists.", key);
                 return false;
             }
 
-            logger.LogDebug("Added ModbusRTU: key={Key}", key);
+            modbus = rtu;
+            logger.LogDebug(" [TryAdd] Added ModbusRTU: key={Key}.", key);
             return true;
         }
-
 
         public bool TryRemove(string key)
         {
             ThrowIfDisposed();
-            if (!modbusList.TryRemove(key, out var modbus))
-                return false;
-            modbus.Dispose();
-            logger.LogInformation("Removed Modbus instance: key={Key}", key);
-            return true;
+            return manager.TryRemove(key);
         }
 
+        public bool RegisterAlias(string aliasKey, string existingKey)
+        {
+            ThrowIfDisposed();
+            return manager.RegisterAlias(aliasKey, existingKey);
+        }
+
+        public bool RemoveAlias(string aliasKey)
+        {
+            ThrowIfDisposed();
+            return manager.RemoveAlias(aliasKey);
+        }
 
         public void Dispose()
         {
-            if (disposed)
-                return;
+            if (disposed) return;
             disposed = true;
-            foreach (var kvp in modbusList)
-            {
-                try
-                {
-                    kvp.Value.Dispose();
-                    logger.LogDebug("Disposed Modbus instance: key={Key}", kvp.Key);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error disposing Modbus instance: key={Key}", kvp.Key);
-                }
-            }
-            modbusList.Clear();
-            logger.LogInformation("ModbusFactory disposed ({Count} instances)", modbusList.Count);
+
+            int count = manager.Count;
+            manager.Dispose();
+            logger.LogInformation(" [Dispose] ModbusFactory disposed ({Count} instances).", count);
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (disposed)
-                return;
+            if (disposed) return;
             disposed = true;
 
-            var tasks = modbusList.Select(kvp =>
-            {
-                try
-                {
-                    if (kvp.Value is IAsyncDisposable ad)
-                        return ad.DisposeAsync().AsTask();
-                    kvp.Value.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error disposing Modbus instance: key={Key}", kvp.Key);
-                }
-                return Task.CompletedTask;
-            }).ToList();
-
-            await Task.WhenAll(tasks);
-            modbusList.Clear();
-            logger.LogInformation("ModbusFactory disposed async ({Count} instances)", modbusList.Count);
+            int count = manager.Count;
+            if (manager is IAsyncDisposable ad)
+                await ad.DisposeAsync();
+            else
+                manager.Dispose();
+            logger.LogInformation(" [DisposeAsync] ModbusFactory disposed ({Count} instances).", count);
         }
-
 
         private static void ValidateAndFillDefaults(ModbusTCPConfig config, string key)
         {

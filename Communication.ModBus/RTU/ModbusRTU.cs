@@ -1,8 +1,11 @@
-﻿using Communication.Modbus.Core;
+using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Models;
+using Communication.Modbus.Core.Parsing;
 using Communication.Modbus.Utils;
 using Communication.ModBus.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 using System.IO.Ports;
 
 namespace Communication.Modbus.RTU
@@ -11,41 +14,48 @@ namespace Communication.Modbus.RTU
     {
         private bool disposed;
         private readonly ILogger<ModbusRTU> logger;
+        private readonly IResponseParser responseParser;
+        private readonly Stopwatch stopwatch = Stopwatch.StartNew();
+        private long lastTimestamp;
 
-        public bool IsConnected => serialPort.IsOpen;
+        public bool IsConnected => !disposed && serialPort.IsOpen;
         public ModbusProtocolType ProtocolType => ModbusProtocolType.RTU;
         private readonly SerialPort serialPort = new();
         private readonly SemaphoreSlim requestLock = new(1, 1);
 
         /// <summary>
-        /// ModBus 配置参数
+        /// Modbus RTU configuration.
         /// </summary>
-        /// <exception cref="ModbusException">当配置参数为 null 时，抛出异常</exception>
-        public ModbusRTUConfig Config { get; } 
+        public ModbusRTUConfig Config { get; }
 
-
-        public ModbusRTU(ModbusRTUConfig config) : this(config, NullLogger<ModbusRTU>.Instance)
+        public ModbusRTU(ModbusRTUConfig config)
+            : this(config, NullLogger<ModbusRTU>.Instance, new RtuProtocolParser())
         {
         }
 
         public ModbusRTU(ModbusRTUConfig config, ILogger<ModbusRTU> logger)
+            : this(config, logger, new RtuProtocolParser())
         {
-            this.Config = config 
+        }
+
+        public ModbusRTU(ModbusRTUConfig config, ILogger<ModbusRTU> logger, IResponseParser responseParser)
+        {
+            this.Config = config
                 ?? throw new ModbusException(ModbusErrorCode.InvalidValue, nameof(config) + " is null!");
             this.logger = logger ?? NullLogger<ModbusRTU>.Instance;
+            this.responseParser = responseParser ?? new RtuProtocolParser();
         }
 
         /// <summary>
-        /// 打开指定的COM通道
+        /// Opens the serial port connection.
         /// </summary>
-        /// <returns>是否打开成功</returns>
         public bool Connect()
         {
             ThrowIfDisposed();
 
             if (serialPort.IsOpen)
             {
-                Disconnect();
+                serialPort.Close();
             }
 
             InitialConnection();
@@ -56,19 +66,18 @@ namespace Communication.Modbus.RTU
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.LogError(ex, " [Connect] Failed to open port {PortName}.", Config.PortName);
                 throw;
             }
             return true;
         }
 
         /// <summary>
-        /// 异步连接，内部使用Task.Run方式执行
+        /// Asynchronously opens the serial port connection.
         /// </summary>
-        /// <returns>是否打开成功</returns>
         public Task<bool> ConnectAsync()
         {
-            // SerialPort doesn't have an async Open method, so we run it on a thread pool thread
+            // SerialPort does not have an async Open method, so we use Task.Run.
             return Task.Run(Connect);
         }
 
@@ -91,52 +100,56 @@ namespace Communication.Modbus.RTU
             }
             catch (Exception ex)
             {
-                logger.LogError(" [InitialConnection] Configure port failed: {@Config}, {Exception}", Config, ex.Message);
+                logger.LogError(ex, " [InitialConnection] Configure port failed: {@Config}.", Config);
                 throw;
             }
         }
 
+        /// <summary>
+        /// Closes the serial port connection. The instance can be reconnected afterwards.
+        /// </summary>
         public void Disconnect()
         {
             try
             {
-                if (!IsConnected)
+                if (serialPort.IsOpen)
+                {
                     serialPort.Close();
-                this.serialPort.Dispose();
-                disposed = true;
+                    logger.LogDebug(" [Disconnect] Port {PortName} closed.", Config.PortName);
+                }
             }
             catch (Exception ex)
             {
-                logger.LogError(" [Disconnect] Config failed: {@Config}, {Exception}", Config, ex.Message);
+                logger.LogError(ex, " [Disconnect] Failed to close port {PortName}.", Config.PortName);
                 throw;
             }
         }
 
         public ModbusResult<byte[]> Request(ModbusRequest request)
         {
-            logger.LogInformation(" [Request] Build Execute Tx: {@Tx}", request);
+            logger.LogInformation(" [Request] Executing request: {@Request}", request);
 
             if (!IsConnected)
             {
-                logger.LogWarning(" [Request] Port not open: {Config.PortName}.", Config.PortName);
-                return ModbusResult<byte[]>.Fail(" [Request] Port not open");
+                logger.LogWarning(" [Request] Port not open: {PortName}.", Config.PortName);
+                return ModbusResult<byte[]>.Fail(" [Request] Port not open.");
             }
 
             if (!ModbusHelper.CheckRequest(request))
-                return ModbusResult<byte[]>.Fail(" [Request] Invalid Tx.", request.Data);
+                return ModbusResult<byte[]>.Fail(" [Request] Invalid request.", request.Data);
 
             try
             {
                 requestLock.Wait();
                 var sendResult = Send(request);
 
-                if (!sendResult) return ModbusResult<byte[]>.Fail(" [Request] Send frame occured an error.");
+                if (!sendResult) return ModbusResult<byte[]>.Fail(" [Request] Send frame failed.");
 
                 return Read(request);
             }
             catch (Exception ex)
             {
-                logger.LogError(" [Request] Execute request error: {ex.Message}", ex.Message);
+                logger.LogError(ex, " [Request] Request execution failed.");
                 throw;
             }
             finally
@@ -153,22 +166,21 @@ namespace Communication.Modbus.RTU
             {
                 byte[] requestFrame = ModbusHelper.BuildRequestFrame(request);
 
-                // 清除串口区缓存
-                this.serialPort.DiscardInBuffer();
-                this.serialPort.DiscardOutBuffer();
+                serialPort.DiscardInBuffer();
+                serialPort.DiscardOutBuffer();
 
-                this.serialPort.Write(requestFrame, 0, requestFrame.Length);
-                logger.Tx("MobudTCP", requestFrame);
+                serialPort.Write(requestFrame, 0, requestFrame.Length);
+                logger.Tx("ModbusRTU", requestFrame, stopwatch, ref lastTimestamp);
                 return true;
             }
             catch (TimeoutException)
             {
-                logger.LogError(" [Send] Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
+                logger.LogError(" [Send] Write timeout: {Timeout}ms.", Config.WriteTimeOut);
                 return false;
             }
             catch (Exception ex)
             {
-                logger.LogError(" [Send] Execute request error: {ex.Message}", ex.Message);
+                logger.LogError(ex, " [Send] Send failed.");
                 throw;
             }
         }
@@ -185,44 +197,41 @@ namespace Communication.Modbus.RTU
                     int readBytes = 0;
                     try
                     {
-                        readBytes = this.serialPort.Read(pool, readCounts, pool.Length - readCounts);
+                        readBytes = serialPort.Read(pool, readCounts, pool.Length - readCounts);
                         readCounts += readBytes;
                     }
                     catch (TimeoutException)
                     {
-                        logger.LogError(" [Read] Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
-                        return ModbusResult<byte[]>.Fail($" [Read] Read savle timeout: ({Config.ReadTimeOut}ms)");
+                        logger.LogError(" [Read] Read timeout: {Timeout}ms.", Config.ReadTimeOut);
+                        return ModbusResult<byte[]>.Fail($" [Read] Read slave timeout: ({Config.ReadTimeOut}ms).");
                     }
 
-                    logger.LogInformation(" [Read] Read count: {Count}", readCounts);
+                    logger.LogDebug(" [Read] Bytes received: {Count}.", readCounts);
 
                     if (readCounts < 5) continue;
                     var memory = pool.AsMemory(0, readCounts);
 
-                    // 尝试解析 Modbus 帧
-                    var parseResult = ResponseParser.ParseResponse(memory, request);
+                    var parseResult = responseParser.ParseResponse(memory, request);
 
-                    // 正常帧
                     if (parseResult.IsSuccess)
                     {
                         if (parseResult.Data.Length <= 0)
                         {
-                            logger.LogWarning(" [Read] Parse frame failed, because the data length < 0 : {@response}", parseResult.Data);
-                            throw new ModbusException(ModbusErrorCode.InvalidData, " [Read] Parse frame failed.");
+                            logger.LogWarning(" [Read] Parsed frame has zero length.");
+                            throw new ModbusException(ModbusErrorCode.InvalidData, " [Read] Parsed frame has zero length.");
                         }
-                        logger.Rx("ModbusTCP", parseResult.Data.Span);
+                        logger.Rx("ModbusRTU", parseResult.Data.Span, stopwatch, ref lastTimestamp);
                         return ModbusResult<byte[]>.Success(parseResult.Data.ToArray());
                     }
 
-                    // 等待读取完整的一帧
-                    logger.Rx("ModbusTCP", parseResult.Data.Span);
-                    logger.LogInformation(" [Read] Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
+                    logger.Rx("ModbusRTU", parseResult.Data.Span, stopwatch, ref lastTimestamp);
+                    logger.LogDebug(" [Read] Waiting {Interval}ms for next frame...", Config.IntervalTime);
                     Thread.Sleep(Config.IntervalTime);
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                logger.LogError(" [Read] Receive response error: {e.Message}", e.Message);
+                logger.LogError(ex, " [Read] Receive response failed.");
                 throw;
             }
             finally
@@ -231,37 +240,31 @@ namespace Communication.Modbus.RTU
             }
         }
 
-        /// <summary>
-        /// 执行请求
-        /// </summary>
-        /// <param name="request">ModBus请求帧</param>
-        /// <param name="token">取消令牌</param>
-        /// <returns>执行结果</returns>
         public async Task<ModbusResult<byte[]>> RequestAsync(ModbusRequest request, CancellationToken token = default)
         {
-            logger.LogInformation(" [RequestAsync] Build Execute Tx: {@Tx}", request);
+            logger.LogInformation(" [RequestAsync] Executing request: {@Request}", request);
 
             if (!IsConnected)
             {
-                logger.LogWarning(" [RequestAsync] Port not open: {Config.PortName}.", Config.PortName);
-                return ModbusResult<byte[]>.Fail("Port not open");
+                logger.LogWarning(" [RequestAsync] Port not open: {PortName}.", Config.PortName);
+                return ModbusResult<byte[]>.Fail(" [RequestAsync] Port not open.");
             }
 
             if (!ModbusHelper.CheckRequest(request))
-                return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid Tx.", request.Data);
+                return ModbusResult<byte[]>.Fail(" [RequestAsync] Invalid request.", request.Data);
 
             try
             {
                 await requestLock.WaitAsync(token);
                 var sendResult = await SendAsync(request, token);
 
-                if (!sendResult) return ModbusResult<byte[]>.Fail(" [RequestAsync] Send frame occured an error.");
+                if (!sendResult) return ModbusResult<byte[]>.Fail(" [RequestAsync] Send frame failed.");
 
                 return await ReadAsync(request, token);
             }
             catch (Exception ex)
             {
-                logger.LogError(" [RequestAsync] Execute request error: {ex.Message}", ex.Message);
+                logger.LogError(ex, " [RequestAsync] Request execution failed.");
                 throw;
             }
             finally
@@ -270,12 +273,6 @@ namespace Communication.Modbus.RTU
             }
         }
 
-        /// <summary>
-        /// 执行请求
-        /// </summary>
-        /// <param name="request">ModBus请求帧</param>
-        /// <param name="token">取消令牌</param>
-        /// <returns>执行结果。</returns>
         private async Task<bool> SendAsync(ModbusRequest request, CancellationToken token = default)
         {
             ThrowIfDisposed();
@@ -285,38 +282,30 @@ namespace Communication.Modbus.RTU
                 byte[] requestFrame = ModbusHelper.BuildRequestFrame(request);
                 token.ThrowIfCancellationRequested();
 
-                // 清除串口区缓存
-                this.serialPort.DiscardInBuffer();
-                this.serialPort.DiscardOutBuffer();
+                serialPort.DiscardInBuffer();
+                serialPort.DiscardOutBuffer();
 
-                // 异步处理
                 await Task.Run(() => serialPort.Write(requestFrame, 0, requestFrame.Length), token);
-                logger.Tx("MobudTCP", requestFrame);
+                logger.Tx("ModbusRTU", requestFrame, stopwatch, ref lastTimestamp);
                 return true;
             }
             catch (TimeoutException)
             {
-                logger.LogError(" [SendAsync] Write timeout: {Config.WriteTimeOut}", Config.WriteTimeOut);
+                logger.LogError(" [SendAsync] Write timeout: {Timeout}ms.", Config.WriteTimeOut);
                 return false;
             }
             catch (OperationCanceledException)
             {
-                logger.LogError(" [SendAsync] Send Task Cancelled.");
+                logger.LogWarning(" [SendAsync] Send cancelled.");
                 return false;
             }
             catch (Exception ex)
             {
-                logger.LogError(" [SendAsync] Execute request error: {ex.Message}!", ex.Message);
+                logger.LogError(ex, " [SendAsync] Send failed.");
                 throw;
             }
         }
 
-        /// <summary>
-        /// 读取响应
-        /// </summary>
-        /// <param name="request">ModBus请求帧</param>
-        /// <param name="token">取消令牌</param>
-        /// <returns>执行结果</returns>
         private async Task<ModbusResult<byte[]>> ReadAsync(ModbusRequest request, CancellationToken token = default)
         {
             var pool = System.Buffers.ArrayPool<byte>.Shared.Rent(256);
@@ -332,48 +321,44 @@ namespace Communication.Modbus.RTU
                     int readBytes = 0;
                     try
                     {
-                        //实现串口的 2000ms ReadTimeout，且在等待期间不阻塞主线程
-                        readBytes = await Task.Run(() => this.serialPort.Read(pool, readCounts, pool.Length - readCounts), readTimeoutToken.Token);
+                        readBytes = await Task.Run(() => serialPort.Read(pool, readCounts, pool.Length - readCounts), readTimeoutToken.Token);
                         readCounts += readBytes;
                     }
                     catch (TimeoutException)
                     {
-                        logger.LogError(" [ReadAsync] Read timeout: {Config.ReadTimeOut}", Config.ReadTimeOut);
-                        return ModbusResult<byte[]>.Fail($" [ReadAsync] Read savle timeout: ({Config.ReadTimeOut}ms)");
+                        logger.LogError(" [ReadAsync] Read timeout: {Timeout}ms.", Config.ReadTimeOut);
+                        return ModbusResult<byte[]>.Fail($" [ReadAsync] Read slave timeout: ({Config.ReadTimeOut}ms).");
                     }
 
                     if (readCounts < 5) continue;
                     var memory = pool.AsMemory(0, readCounts);
 
-                    // 尝试解析 Modbus 帧
-                    var parseResult = ResponseParser.ParseResponse(memory, request);
+                    var parseResult = responseParser.ParseResponse(memory, request);
                     if (parseResult.IsSuccess)
                     {
-                        logger.LogInformation(" [ReadAsync] Try parse frame success: {@response}", parseResult.Data);
                         if (parseResult.Data.Length <= 0)
                         {
-                            logger.LogWarning(" [ReadAsync] Parse frame failed, because the data length < 0 : {@response}", parseResult.Data);
-                            throw new InvalidOperationException(" [ReadAsync] Parse frame failed.");
+                            logger.LogWarning(" [ReadAsync] Parsed frame has zero length.");
+                            throw new InvalidOperationException(" [ReadAsync] Parsed frame has zero length.");
                         }
 
-                        logger.Rx("ModbusTCP", parseResult.Data.Span);
+                        logger.Rx("ModbusRTU", parseResult.Data.Span, stopwatch, ref lastTimestamp);
                         return ModbusResult<byte[]>.Success(parseResult.Data.Span.ToArray());
                     }
 
-                    // 等待读取完整的一帧
-                    logger.Rx("ModbusTCP", parseResult.Data.Span);
-                    logger.LogWarning(" [ReadAsync] Wait {Config.IntervalTime}ms for next frame...", Config.IntervalTime);
+                    logger.Rx("ModbusRTU", parseResult.Data.Span, stopwatch, ref lastTimestamp);
+                    logger.LogDebug(" [ReadAsync] Waiting {Interval}ms for next frame...", Config.IntervalTime);
                     await Task.Delay(Config.IntervalTime, token);
                 }
             }
-            catch (OperationCanceledException oex)
+            catch (OperationCanceledException ex)
             {
-                logger.LogError(" [ReadAsync] Receive response error: {oex.Message}", oex.Message);
-                return ModbusResult<byte[]>.Fail(oex.ToString());
+                logger.LogError(ex, " [ReadAsync] Read cancelled.");
+                return ModbusResult<byte[]>.Fail(ex.ToString());
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                logger.LogError(" [ReadAsync] Receive response error: {e.Message}", e.Message);
+                logger.LogError(ex, " [ReadAsync] Receive response failed.");
                 throw;
             }
             finally
@@ -384,15 +369,24 @@ namespace Communication.Modbus.RTU
 
         public void Dispose()
         {
-            if (serialPort.IsOpen)
-                Disconnect();
-            serialPort.Dispose();
+            if (disposed) return;
             disposed = true;
+
+            try
+            {
+                if (serialPort.IsOpen)
+                    serialPort.Close();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, " [Dispose] Error closing serial port.");
+            }
+
+            serialPort.Dispose();
+            requestLock.Dispose();
+            logger.LogDebug(" [Dispose] ModbusRTU disposed.");
         }
 
-        /// <summary>
-        /// 检查是否已处置。
-        /// </summary>
         private void ThrowIfDisposed()
         {
             ObjectDisposedException.ThrowIf(disposed, this);

@@ -1,4 +1,4 @@
-namespace Communication.Modbus.Core
+namespace Communication.Modbus.Core.Models
 {
     /// <summary>
     /// ModBus 发送数据类，用于封装 ModBus 发送数据。
@@ -6,12 +6,18 @@ namespace Communication.Modbus.Core
     public class ModbusRequest
     {
         /// <summary>
-        /// 功能码改变事件。
+        /// 功能码改变事件
         /// </summary>
         public event Action<ModbusFunctionCode>? OnFunctionCodeChanged;
+
+        /// <summary>
+        /// 协议类型改变事件
+        /// </summary>
         public event Action<ModbusProtocolType>? OnProtocolTypeChanged;
 
-
+        /// <summary>
+        /// 协议类型
+        /// </summary>
         public ushort TransactionId { get; set; } = 0x0000;
         
         private ModbusProtocolType protocolType = ModbusProtocolType.TCP;
@@ -34,7 +40,7 @@ namespace Communication.Modbus.Core
         /// <summary>
         /// 功能码。
         /// </summary>
-        private ModbusFunctionCode functionCode = ModbusFunctionCode.WriteMultipleHodingRegisters;
+        private ModbusFunctionCode functionCode = ModbusFunctionCode.WriteMultipleHoldingRegisters;
         public ModbusFunctionCode FunctionCode 
         {
             get => functionCode;
@@ -45,12 +51,12 @@ namespace Communication.Modbus.Core
         }
 
         /// <summary>
-        /// 起始地址。
+        /// 起始地址
         /// </summary>
         public ushort Start { get; set; } = 0x00;
 
         /// <summary>
-        /// 数据长度。
+        /// 数据长度
         /// </summary>
         public ushort Length { get; set; } = 0x03;
 

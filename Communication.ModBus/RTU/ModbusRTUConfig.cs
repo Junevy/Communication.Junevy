@@ -1,65 +1,63 @@
-﻿using Communication.Modbus.Core;
+using Communication.Modbus.Core.Interfaces;
 using System.IO.Ports;
 
 namespace Communication.Modbus.RTU
 {
-    public class ModbusRTUConfig
+    public class ModbusRTUConfig : IModbusConfig
     {
         /// <summary>
-        /// 串口名称。
+        /// Serial port name (e.g., COM1, /dev/ttyUSB0).
         /// </summary>
-        public string PortName { get; set; } =
-            "COM20" ?? throw new ModbusException(ModbusErrorCode.GatewayUnavailable, nameof(PortName));
-        
-        /// <summary>
-        /// 波特率。
-        /// </summary>
-        public int BaudRate { get; set; } = 9600;
-        
-        /// <summary>
-        /// 校验位。
-        /// </summary>
-        public Parity Parity { get; set; } = Parity.None;
-        
-        /// <summary>
-        /// 数据位。
-        /// </summary>
-        public int DataBits { get; set; } = 8;
-        
-        /// <summary>
-        /// 停止位。
-        /// </summary>
-        public StopBits StopBits { get; set; } = StopBits.One;
-        
-        /// <summary>
-        /// 是否启用 DTR。
-        /// </summary>
-        public bool DtrEnable { get; set; } = false;
-        
-        /// <summary>
-        /// 是否启用 RTS。
-        /// </summary>
-        public bool RtsEnable { get; set;} = false;
+        public string PortName { get; set; } = "COM20";
 
         /// <summary>
-        /// 写超时时间。
+        /// Baud rate.
+        /// </summary>
+        public int BaudRate { get; set; } = 9600;
+
+        /// <summary>
+        /// Parity setting.
+        /// </summary>
+        public Parity Parity { get; set; } = Parity.None;
+
+        /// <summary>
+        /// Data bits (5-8).
+        /// </summary>
+        public int DataBits { get; set; } = 8;
+
+        /// <summary>
+        /// Stop bits.
+        /// </summary>
+        public StopBits StopBits { get; set; } = StopBits.One;
+
+        /// <summary>
+        /// Enable DTR signal.
+        /// </summary>
+        public bool DtrEnable { get; set; } = false;
+
+        /// <summary>
+        /// Enable RTS signal.
+        /// </summary>
+        public bool RtsEnable { get; set; } = false;
+
+        /// <summary>
+        /// Write timeout in milliseconds.
         /// </summary>
         public int WriteTimeOut { get; set; } = 2000;
 
         /// <summary>
-        /// 读超时时间。
+        /// Read timeout in milliseconds.
         /// </summary>
         public int ReadTimeOut { get; set; } = 2000;
 
         /// <summary>
-        /// 重试次数。
+        /// Number of retry attempts.
         /// </summary>
         public int RetryCount { get; set; } = 3;
 
         /// <summary>
-        /// 等待报文Rx间隔时间。
+        /// Interval in milliseconds to wait between partial frame reads.
         /// </summary>
         public int IntervalTime { get; set; } = 30;
-
     }
 }

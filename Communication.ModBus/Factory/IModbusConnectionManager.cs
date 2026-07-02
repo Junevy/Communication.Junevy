@@ -1,23 +1,22 @@
 using Communication.Modbus.Core.Interfaces;
 using Communication.Modbus.Core.Models;
-using Communication.Modbus.RTU;
-using Communication.Modbus.TCP;
 
 namespace Communication.Modbus.Factory
 {
     /// <summary>
-    /// Creates and manages named Modbus instances.
-    /// Combines factory (creation) and registry (lifecycle) concerns behind a single facade.
+    /// Manages the lifecycle of named Modbus instances.
+    /// Supports aliasing so multiple logical names can share one physical connection
+    /// (e.g., multiple RTU slaves on the same RS-485 bus).
     /// </summary>
-    public interface IModbusFactory : IDisposable, IAsyncDisposable
+    public interface IModbusConnectionManager : IDisposable, IAsyncDisposable
     {
         /// <summary>
-        /// Total number of physical Modbus instances under management.
+        /// Gets the total number of physical Modbus instances under management.
         /// </summary>
         int Count { get; }
 
         /// <summary>
-        /// All registered names (including aliases).
+        /// Gets all registered names (including aliases).
         /// </summary>
         IEnumerable<string> Keys { get; }
 
@@ -38,36 +37,28 @@ namespace Communication.Modbus.Factory
         bool TryGet(string key, out IModbus? modbus);
 
         /// <summary>
-        /// Gets an existing instance or creates a new Modbus TCP connection.
+        /// Registers a new Modbus instance under the given name.
+        /// Returns false if the name is already registered.
         /// </summary>
-        IModbus GetOrAdd(string key, ModbusTCPConfig config);
+        bool Add(string key, IModbus modbus);
 
         /// <summary>
-        /// Gets an existing instance or creates a new Modbus RTU connection.
+        /// Atomically retrieves an existing instance or adds the one produced by the factory.
         /// </summary>
-        IModbus GetOrAdd(string key, ModbusRTUConfig config);
-
-        /// <summary>
-        /// Tries to add a new Modbus TCP connection. Fails if the key already exists.
-        /// </summary>
-        bool TryAdd(string key, ModbusTCPConfig config, out IModbus? modbus);
-
-        /// <summary>
-        /// Tries to add a new Modbus RTU connection. Fails if the key already exists.
-        /// </summary>
-        bool TryAdd(string key, ModbusRTUConfig config, out IModbus? modbus);
+        IModbus GetOrAdd(string key, Func<string, IModbus> factory);
 
         /// <summary>
         /// Removes and disposes the Modbus instance registered under the given name.
-        /// If the instance is referenced by aliases, only this name is removed.
+        /// If the instance has aliases, only the alias is removed — the instance is not disposed.
         /// </summary>
         bool TryRemove(string key);
 
         /// <summary>
         /// Registers an alias so that <paramref name="aliasKey"/> resolves to the same
         /// instance as <paramref name="existingKey"/>. Useful for multi-drop RS-485 where
-        /// multiple slave IDs share a single physical serial port connection.
+        /// multiple slaves share one physical connection.
         /// </summary>
+        /// <returns>True if the alias was registered; false if the alias key already exists.</returns>
         bool RegisterAlias(string aliasKey, string existingKey);
 
         /// <summary>

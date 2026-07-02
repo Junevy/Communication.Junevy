@@ -1,30 +1,32 @@
+using Communication.Modbus.Core.Interfaces;
+
 namespace Communication.Modbus.TCP
 {
-    public class ModbusTCPConfig
+    public class ModbusTCPConfig : IModbusConfig
     {
         public string Address { get; set; } = "127.0.0.1";
 
         public int Port { get; private set; } = 502;
 
-        public bool Reconnect {get; set;} = false;
+        public bool Reconnect { get; set; } = false;
 
         /// <summary>
-        /// 连接超时时间。
+        /// Connection timeout in milliseconds.
         /// </summary>
         public int ConnectTimeout { get; set; } = 2000;
 
         /// <summary>
-        /// 写超时时间。
+        /// Write timeout in milliseconds.
         /// </summary>
         public int WriteTimeOut { get; set; } = 2000;
 
         /// <summary>
-        /// 读超时时间。
+        /// Read timeout in milliseconds.
         /// </summary>
         public int ReadTimeOut { get; set; } = 2000;
 
         /// <summary>
-        /// 重试次数。
+        /// Number of retry attempts.
         /// </summary>
         public int RetryCount { get; set; } = 3;
 
@@ -38,7 +40,5 @@ namespace Communication.Modbus.TCP
             this.Port = port;
             return true;
         }
-
-
     }
 }

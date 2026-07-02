@@ -1,4 +1,4 @@
-namespace Communication.Modbus.Core
+namespace Communication.Modbus.Core.Models
 {
     public class ModbusException : Exception
     {

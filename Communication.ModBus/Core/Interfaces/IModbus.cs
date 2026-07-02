@@ -1,6 +1,6 @@
-﻿using System.Buffers;
+﻿using Communication.Modbus.Core.Models;
 
-namespace Communication.Modbus.Core
+namespace Communication.Modbus.Core.Interfaces
 {
     /// <summary>
     /// ModBus 接口，用于定义 ModBus 操作。
@@ -24,9 +24,9 @@ namespace Communication.Modbus.Core
         public bool Connect();
 
         /// <summary>
-        /// 异步连接 ModBus 从站。
+        /// 异步连接 ModBus 从站
         /// </summary>
-        /// <returns>是否成功连接。</returns>
+        /// <returns>是否成功连接</returns>
         public Task<bool> ConnectAsync();
 
         /// <summary>

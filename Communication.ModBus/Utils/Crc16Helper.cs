@@ -1,4 +1,5 @@
 ﻿using Communication.Modbus.Extensions;
+using System.Runtime.InteropServices;
 
 namespace Communication.Modbus.Utils
 {
@@ -38,7 +39,10 @@ namespace Communication.Modbus.Utils
         /// </summary>
         /// <param name="frame">需要被添加CRC16校验码的byte[]类型的值</param>
         public static void AddCrc16(List<byte> frame)
-            => frame.AddRange(CrcLittleEndian([.. frame]));
+        {
+            var span = CollectionsMarshal.AsSpan(frame);
+            frame.AddRange(CrcLittleEndian(span));
+        }
 
         /// <summary>
         /// 计算byte[] 值的CRC16校验码

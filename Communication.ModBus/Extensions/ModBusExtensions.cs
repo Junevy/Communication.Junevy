@@ -1,4 +1,5 @@
-using Communication.Modbus.Core;
+using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Models;
 using Communication.Modbus.Utils;
 
 namespace Communication.Modbus.Extensions
@@ -194,7 +195,7 @@ namespace Communication.Modbus.Extensions
                 throw new ModbusException(ModbusErrorCode.InvalidValue, " [ReadHoldingRegisters] The length must be between 1 and 125.");
 
             return ExecuteReadRequest(
-                modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadHoldingRegisters,
                 ModbusHelper.ParseRegisters);
         }
 
@@ -207,7 +208,7 @@ namespace Communication.Modbus.Extensions
                 throw new ModbusException(ModbusErrorCode.InvalidValue, " [ReadHoldingRegistersAsync] The length must be between 1 and 125.");
 
             return await ExecuteReadRequestAsync(
-                modBus, slaveId, start, length, ModbusFunctionCode.ReadHodingRegisters,
+                modBus, slaveId, start, length, ModbusFunctionCode.ReadHoldingRegisters,
                 ModbusHelper.ParseRegisters, cancellationToken);
         }
 
@@ -280,7 +281,7 @@ namespace Communication.Modbus.Extensions
         {
             byte[] data = value.ToBigEndian();
 
-            return ExecuteWriteRequest(modBus, slaveId, start, 1, ModbusFunctionCode.WriteHodingRegister, data);
+            return ExecuteWriteRequest(modBus, slaveId, start, 1, ModbusFunctionCode.WriteHoldingRegister, data);
         }
 
         /// <summary>
@@ -297,7 +298,7 @@ namespace Communication.Modbus.Extensions
             byte[] data = value.ToBigEndian();
 
             return await ExecuteWriteRequestAsync(
-                modBus, slaveId, start, 1, ModbusFunctionCode.WriteHodingRegister, data, cancellationToken);
+                modBus, slaveId, start, 1, ModbusFunctionCode.WriteHoldingRegister, data, cancellationToken);
         }
 
 
@@ -377,7 +378,7 @@ namespace Communication.Modbus.Extensions
             byte[] data = values.ToBigEndianByteArray();
 
             return ExecuteWriteRequest(
-                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultipleHodingRegisters, data);
+                modBus, slaveId, start, (ushort)values.Length, ModbusFunctionCode.WriteMultipleHoldingRegisters, data);
         }
 
         /// <summary>
@@ -400,7 +401,153 @@ namespace Communication.Modbus.Extensions
 
             return await ExecuteWriteRequestAsync(
                 modBus, slaveId, start, (ushort)values.Length,
-                ModbusFunctionCode.WriteMultipleHodingRegisters, data, cancellationToken);
+                ModbusFunctionCode.WriteMultipleHoldingRegisters, data, cancellationToken);
+        }
+
+        /// <summary>
+        /// Mask Write Register (0x16) — atomically applies AND mask then OR mask to a single holding register.
+        /// Result = (CurrentValue &amp; andMask) | orMask.
+        /// </summary>
+        /// <param name="modBus">IModbus instance.</param>
+        /// <param name="slaveId">Slave ID.</param>
+        /// <param name="start">Register address.</param>
+        /// <param name="andMask">AND mask (bits cleared where mask is 0).</param>
+        /// <param name="orMask">OR mask (bits set where mask is 1).</param>
+        public static ModbusResult<byte[]> MaskWriteRegister(this IModbus modBus, byte slaveId, ushort start, ushort andMask, ushort orMask)
+        {
+            byte[] data =
+            [
+                .. andMask.ToBigEndian(),
+                .. orMask.ToBigEndian(),
+            ];
+
+            return ExecuteWriteRequest(modBus, slaveId, start, 1, ModbusFunctionCode.MaskWriteRegister, data);
+        }
+
+        /// <summary>
+        /// Mask Write Register (0x16) — async version.
+        /// </summary>
+        public static async ValueTask<ModbusResult<byte[]>> MaskWriteRegisterAsync(this IModbus modBus, byte slaveId, ushort start,
+            ushort andMask, ushort orMask, CancellationToken cancellationToken = default)
+        {
+            byte[] data =
+            [
+                .. andMask.ToBigEndian(),
+                .. orMask.ToBigEndian(),
+            ];
+
+            return await ExecuteWriteRequestAsync(modBus, slaveId, start, 1, ModbusFunctionCode.MaskWriteRegister, data, cancellationToken);
+        }
+
+        /// <summary>
+        /// Read/Write Multiple Registers (0x17) — writes values to one register range and reads from another
+        /// in a single atomic transaction.
+        /// </summary>
+        /// <param name="modBus">IModbus instance.</param>
+        /// <param name="slaveId">Slave ID.</param>
+        /// <param name="readStart">Starting address to read from.</param>
+        /// <param name="readLength">Number of registers to read (1..125).</param>
+        /// <param name="writeStart">Starting address to write to.</param>
+        /// <param name="writeValues">Register values to write (1..121).</param>
+        public static ModbusResult<ushort[]> ReadWriteMultipleRegisters(this IModbus modBus, byte slaveId,
+            ushort readStart, ushort readLength, ushort writeStart, ushort[] writeValues)
+        {
+            if (readLength == 0 || readLength > 125)
+                throw new ModbusException(ModbusErrorCode.InvalidQuantity,
+                    " [ReadWriteMultipleRegisters] The read quantity must be between 1 and 125.");
+            if (writeValues == null || writeValues.Length == 0 || writeValues.Length > 121)
+                throw new ModbusException(ModbusErrorCode.InvalidQuantity,
+                    " [ReadWriteMultipleRegisters] The write quantity must be between 1 and 121.");
+
+            byte[] writeData = writeValues.ToBigEndianByteArray();
+            byte writeByteCount = (byte)(writeValues.Length * 2);
+
+            // Encode all parameters into Data for the custom frame builder
+            byte[] data =
+            [
+                .. readStart.ToBigEndian(),
+                .. readLength.ToBigEndian(),
+                .. writeStart.ToBigEndian(),
+                .. ((ushort)writeValues.Length).ToBigEndian(),
+                writeByteCount,
+                .. writeData,
+            ];
+
+            var tx = new ModbusRequest
+            {
+                ProtocolType = modBus.ProtocolType,
+                SlaveId = slaveId,
+                FunctionCode = ModbusFunctionCode.ReadWriteMultipleRegisters,
+                Start = readStart,
+                Length = readLength,
+                Data = data
+            };
+
+            var result = modBus.Request(tx);
+            if (result.IsSuccess && result.Data?.Length > 0)
+            {
+                var pduOffset = modBus.ProtocolType == ModbusProtocolType.TCP ? 6 : 0;
+                var slice = result.Data.AsMemory().Span;
+                if ((byte)(slice[pduOffset + 1] & 0x80) >= 0x80)
+                    return ModbusResult<ushort[]>.Fail($"Exception code: {slice[pduOffset + 1]}");
+
+                var parsed = ModbusHelper.ParseRegisters(slice.ToArray(), readLength);
+                return ModbusResult<ushort[]>.Success(parsed);
+            }
+
+            return ModbusResult<ushort[]>.Fail(result.ErrorMessage ?? " [ReadWriteMultipleRegisters] Request failed.");
+        }
+
+        /// <summary>
+        /// Read/Write Multiple Registers (0x17) — async version.
+        /// </summary>
+        public static async ValueTask<ModbusResult<ushort[]>> ReadWriteMultipleRegistersAsync(this IModbus modBus, byte slaveId,
+            ushort readStart, ushort readLength, ushort writeStart, ushort[] writeValues,
+            CancellationToken cancellationToken = default)
+        {
+            if (readLength == 0 || readLength > 125)
+                throw new ModbusException(ModbusErrorCode.InvalidQuantity,
+                    " [ReadWriteMultipleRegistersAsync] The read quantity must be between 1 and 125.");
+            if (writeValues == null || writeValues.Length == 0 || writeValues.Length > 121)
+                throw new ModbusException(ModbusErrorCode.InvalidQuantity,
+                    " [ReadWriteMultipleRegistersAsync] The write quantity must be between 1 and 121.");
+
+            byte[] writeData = writeValues.ToBigEndianByteArray();
+            byte writeByteCount = (byte)(writeValues.Length * 2);
+
+            byte[] data =
+            [
+                .. readStart.ToBigEndian(),
+                .. readLength.ToBigEndian(),
+                .. writeStart.ToBigEndian(),
+                .. ((ushort)writeValues.Length).ToBigEndian(),
+                writeByteCount,
+                .. writeData,
+            ];
+
+            var tx = new ModbusRequest
+            {
+                ProtocolType = modBus.ProtocolType,
+                SlaveId = slaveId,
+                FunctionCode = ModbusFunctionCode.ReadWriteMultipleRegisters,
+                Start = readStart,
+                Length = readLength,
+                Data = data
+            };
+
+            var result = await modBus.RequestAsync(tx, cancellationToken);
+            if (result.IsSuccess && result.Data?.Length > 0)
+            {
+                var pduOffset = modBus.ProtocolType == ModbusProtocolType.TCP ? 6 : 0;
+                var slice = result.Data.AsMemory().Span;
+                if ((byte)(slice[pduOffset + 1] & 0x80) >= 0x80)
+                    return ModbusResult<ushort[]>.Fail($"Exception code: {slice[pduOffset + 1]}");
+
+                var parsed = ModbusHelper.ParseRegisters(slice.ToArray(), readLength);
+                return ModbusResult<ushort[]>.Success(parsed);
+            }
+
+            return ModbusResult<ushort[]>.Fail(result.ErrorMessage ?? " [ReadWriteMultipleRegistersAsync] Request failed.");
         }
     }
 }

@@ -1,42 +1,36 @@
-﻿using Communication.Modbus.Core;
+using Communication.Modbus.Core.Interfaces;
+using Communication.Modbus.Core.Models;
 using Communication.Modbus.Extensions;
-
 
 namespace Communication.Modbus.Utils
 {
     public static class ModbusHelper
     {
         /// <summary>
-        /// 检查ModBus发送请求帧是否有效
+        /// Validates a Modbus request frame.
         /// </summary>
-        /// <param name="request">ModBus发送请求帧对象</param>
-        /// <returns>是否有效</returns>
         public static bool CheckRequest(ModbusRequest request)
         {
-            if (request.Start < 0
-                || request.Start > 0xFFFF
-                || request.Length < 0
+            if (request.Start > 0xFFFF
                 || request.Length > 0xFFFF
-                || request.SlaveId < 0 || request.SlaveId > 255
+                || request.SlaveId > 255
                 || request.FunctionCode < ModbusFunctionCode.ReadCoils
-                || request.FunctionCode > ModbusFunctionCode.WriteMultipleHodingRegisters)
+                || request.FunctionCode > ModbusFunctionCode.WriteMultipleHoldingRegisters)
                 return false;
 
             if (request.FunctionCode < ModbusFunctionCode.WriteCoil ||
-                request.FunctionCode > ModbusFunctionCode.WriteMultipleHodingRegisters) return true;
+                request.FunctionCode > ModbusFunctionCode.WriteMultipleHoldingRegisters) return true;
             return request.Data != null && request.Data.Length > 0;
         }
 
         /// <summary>
-        /// 构建ModBus发送帧
+        /// Builds a Modbus request frame from a request object.
         /// </summary>
-        /// <param name="request">ModBus发送请求帧对象</param>
-        /// <returns>ModBus发送帧</returns>
-        /// <exception cref="InvalidDataException">当Tx无效时抛出异常</exception>
+        /// <exception cref="ModbusException">Thrown when the request is invalid.</exception>
         public static byte[] BuildRequestFrame(ModbusRequest request)
         {
             if (!CheckRequest(request))
-                throw new ModbusException(ModbusErrorCode.InvalidValue, "Invalid request");
+                throw new ModbusException(ModbusErrorCode.InvalidValue, "Invalid request.");
 
             return request.ProtocolType switch
             {
@@ -55,37 +49,61 @@ namespace Communication.Modbus.Utils
                 if (request.Data == null || request.Data.Length <= 0)
                     throw new ModbusException(ModbusErrorCode.InvalidData, "The data is empty.");
 
-                // 构建写入帧（单个写入）
-                if (request.FunctionCode == ModbusFunctionCode.WriteCoil || request.FunctionCode == ModbusFunctionCode.WriteHodingRegister)
+                // 0x16 Mask Write Register: [SlaveId, 0x16, Start(2), AndMask(2), OrMask(2)]
+                if (request.FunctionCode == ModbusFunctionCode.MaskWriteRegister)
                     frame =
                     [
                         request.SlaveId,
-                        (byte) request.FunctionCode,
+                        (byte)request.FunctionCode,
+                        .. request.Start.ToBigEndian(),
+                        .. request.Data,  // Data = [AndHi, AndLo, OrHi, OrLo]
+                    ];
+
+                // Build single-write frame
+                else if (request.FunctionCode == ModbusFunctionCode.WriteCoil || request.FunctionCode == ModbusFunctionCode.WriteHoldingRegister)
+                    frame =
+                    [
+                        request.SlaveId,
+                        (byte)request.FunctionCode,
                         .. request.Start.ToBigEndian(),
                         .. request.Data,
                     ];
 
-                // 构建写入帧（多个写入）
+                // Build multi-write frame
                 else
                     frame =
                     [
                         request.SlaveId,
-                        (byte) request.FunctionCode,
+                        (byte)request.FunctionCode,
                         .. request.Start.ToBigEndian(),
                         .. request.Length.ToBigEndian(),
-                        (byte)  (request.FunctionCode == ModbusFunctionCode.WriteMultipleCoils
-                                    ? (request.Length + 7) / 8 : (request.Length * 2) ),
+                        (byte)(request.FunctionCode == ModbusFunctionCode.WriteMultipleCoils
+                                    ? (request.Length + 7) / 8 : (request.Length * 2)),
                         .. request.Data,
                     ];
             }
 
-            // 构建读取帧
+            // 0x17 Read/Write Multiple Registers: [SlaveId, 0x17, ReadStart(2), ReadQty(2), WriteStart(2), WriteQty(2), WriteByteCount, WriteData...]
+            else if (request.FunctionCode == ModbusFunctionCode.ReadWriteMultipleRegisters)
+            {
+                if (request.Data == null || request.Data.Length <= 0)
+                    throw new ModbusException(ModbusErrorCode.InvalidData, "The data is empty.");
+
+                frame =
+                [
+                    request.SlaveId,
+                    (byte)request.FunctionCode,
+                    .. request.Data,  // Pre-encoded: [ReadStart, ReadQty, WriteStart, WriteQty, ByteCount, WriteRegData...]
+                ];
+            }
+
+            // Build read frame
             else
             {
                 frame =
                 [
                     request.SlaveId,
-                    (byte) request.FunctionCode,
+                    (byte)request.FunctionCode,
                     .. request.Start.ToBigEndian(),
                     .. request.Length.ToBigEndian(),
                 ];
@@ -100,33 +118,30 @@ namespace Communication.Modbus.Utils
 
         private static byte[] BuildTcpRequestFrame(ModbusRequest request)
         {
-            var baseFrame = BuildRtuRequestFrame(request);
-            request.ByteCount = (ushort)(baseFrame.Length - 2);
+            var rtuFrame = BuildRtuRequestFrame(request);
+            // PDU = RTU frame minus 2-byte CRC (the last 2 bytes are not part of the TCP payload)
+            var pdu = rtuFrame.AsSpan(0, rtuFrame.Length - 2);
             var transactionId = (ushort)(request.TransactionId + 0x01);
 
             List<byte> frame =
-                [
+            [
                 .. transactionId.ToBigEndian(),
                 0x00,
                 0x00,
-                .. request.ByteCount.ToBigEndian(),
-                .. baseFrame.Take(baseFrame.Length - 2)
+                .. ((ushort)pdu.Length).ToBigEndian(),
+                .. pdu,
             ];
 
             return [.. frame];
         }
 
-
         /// <summary>
-        /// 解析ModBus接收帧中的线圈数据
+        /// Parses coil values from a Modbus response frame.
         /// </summary>
-        /// <param name="response">ModBus接收帧</param>
-        /// <param name="length">读取线圈数量</param>
-        /// <returns>读取到的线圈数据</returns>
         public static bool[] ParseCoils(byte[] response, int length)
         {
             if (response == null)
-                throw new ModbusException(ModbusErrorCode.InvalidData, "The request data cannot be null.");
+                throw new ModbusException(ModbusErrorCode.InvalidData, "The response data cannot be null.");
 
             if (length <= 0)
                 throw new ModbusException(ModbusErrorCode.InvalidValue, "Length must be greater than 0.");
@@ -134,7 +149,7 @@ namespace Communication.Modbus.Utils
             int expectedByteCount = (length + 7) / 8;
             if (response.Length < 2 + expectedByteCount)
                 throw new ModbusException(ModbusErrorCode.InvalidData,
-                    "The rx data is not enough for the requested length.");
+                    "The response data is not enough for the requested length.");
 
             bool[] result = new bool[length];
             var start = 3;
@@ -151,23 +166,19 @@ namespace Communication.Modbus.Utils
         }
 
         /// <summary>
-        /// 解析ModBus接收帧中的寄存器数据。
+        /// Parses register values from a Modbus response frame.
         /// </summary>
-        /// <param name="response">ModBus接收帧</param>
-        /// <param name="length">读取寄存器数量</param>
-        /// <returns>读取到的寄存器数据</returns>
         public static ushort[] ParseRegisters(byte[] response, int length)
         {
             if (response == null)
-                throw new ModbusException(ModbusErrorCode.InvalidData, "The rx data cannot be null.");
+                throw new ModbusException(ModbusErrorCode.InvalidData, "The response data cannot be null.");
 
             if (length <= 0)
                 throw new ModbusException(ModbusErrorCode.InvalidData, "Length must be greater than 0.");
 
             if (response.Length < 3 + length * 2)
                 throw new ModbusException(ModbusErrorCode.InvalidData,
-                    "The rx data is not enough for the requested length.");
-
+                    "The response data is not enough for the requested length.");
 
             ushort[] result = new ushort[length];
 
@@ -179,9 +190,8 @@ namespace Communication.Modbus.Utils
             return result;
         }
 
-        public static bool VerifyAddress(string address) => !(address == null || string.IsNullOrEmpty(address));
+        public static bool VerifyAddress(string address) => !string.IsNullOrEmpty(address);
 
-        public static bool VerifyPort(int port) => port == 502 || (port <= 1024 && port <= 65535);
-
+        public static bool VerifyPort(int port) => (port >= 1024 && port <= 65535) || port == 502;
     }
 }
